@@ -31,24 +31,30 @@
 
 ---
 
-## 🛠️ The .ASCV Ecosystem
+## � The .ASCV Protocol (Architecture & Efficiency)
 
-Standard image formats weren't built for ASCII. We created the `.ascv` (ASCII-Vector) protocol to treat text and color data as first-class citizens.
+Standard media formats (MP4, PNG, JPG) are designed to compress *pixels*. **ChromaASCII** is designed to compress *intent*. We developed the `.ascv` (ASCII-Vector) protocol to handle high-density character grids with specialized delta-encoding.
 
-### 📊 Efficiency Benchmarks
-*Tested with a 150-resolution colored source (Single Frame)*
+### 📊 Comparative Analysis
+*Measured using a single 150-resolution colored frame (Rendered at 900x900px)*
 
-| Format | Storage Method | Size | Advantage |
+| Format | Method | Payload Size | Comparison |
 | :--- | :--- | :--- | :--- |
-| **🚫 Base64** | Text-encoded raw data | **~260 KB** | Inefficient (+33% Bloat) |
-| **📄 Raw JSON** | Plain text object | **~200 KB** | Baseline |
-| **🖼️ PNG** | 900x900 Pixel Grid | **33.8 KB** | Heavy Raster |
-| **📟 .ASCV.GZ** | **Our Optimized Logic** | **10.2 KB** | **The Winner (3x Better)** |
+| **🚫 Base64** | Text-Encoded ASCII | **~260 KB** | Avoid this (33% overhead) |
+| **📄 Raw JSON** | Plain Text Metadata | **~200 KB** | 100% (The Reference) |
+| **🖼️ PNG** | Pixel-Level Compression | **33.8 KB** | 16% |
+| **📟 .ASCV.GZ** | **Protocol-Level Logic** | **10.2 KB** | **5% (The Gold Standard)** |
 
-> **Why it wins:** Traditional formats like PNG try to compress every tiny pixel. **ChromaASCII** understands the underlying character grid and optimizes for "Differences" and "Sparse Colors."
+### 🚀 Why `.ascv` is the Superior Choice
 
-### 🧠 Logic vs. Pixels
-While a 150x150 PNG might seem small, it blurs when upscaled. **.ASCV** stores the *intent* of the data. A **10KB** file can generate a **razor-sharp 4K ASCII output** because it's rendering vectors/characters, not stretching pixels.
+#### 1. Semantic Intelligence
+A PNG compressor doesn't know what a '█' character is. It sees it as a grid of pixels. **ChromaASCII** knows exactly where characters start and end, allowing us to store metadata instead of raw raster data.
+
+#### 2. Infinite Resolution (Vector-Like)
+Because we store instructions rather than pixels, you can scale your output to **8K or beyond** without losing a single edge. The 10KB file doesn't define piksels; it defines the grid, making it functionally closer to a vector format than a video format.
+
+#### 3. Lossless Delta-Compression
+In Video Mode, we don't store full frames. We store the "Color-Text Shift"—only the differences between frames. This mathematical approach allows minutes of colorful ASCII video to fit into just a few Megabytes.
 
 ---
 
