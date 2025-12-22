@@ -26,12 +26,12 @@
 *   **🚀 Extreme Performance** – Optimized CPU processing using `Uint32Array` color packing and raw buffer manipulation. No GPU required (but GPU-friendly).
 *   **🌈 Full RGB Fidelity** – Beyond standard grayscale. Every character carries its own 24-bit color data for stunning visual accuracy.
 *   **🎬 Delta-Compression Engine** – Our custom `.ascv` protocol only stores changed pixels between frames, making long ASCII videos viable.
-*   **� Zero-Dependency Core** – Built with pure Vanilla JS. No bulky libraries, just efficient logic and native browser APIs.
-*   **�️ Cross-Platform Decoder** – Port your ASCII animations anywhere with the lightweight standalone decoder.
+*   **📦 Zero-Dependency Core** – Built with pure Vanilla JS. No bulky libraries, just efficient logic and native browser APIs.
+*   **🛰️ Cross-Platform Decoder** – Port your ASCII animations anywhere with the lightweight standalone decoder.
 
 ---
 
-## � The .ASCV Protocol (Architecture & Efficiency)
+## 📟 The .ASCV Protocol (Architecture & Efficiency)
 
 Standard media formats (MP4, PNG, JPG) are designed to compress *pixels*. **ChromaASCII** is designed to compress *intent*. We developed the `.ascv` (ASCII-Vector) protocol to handle high-density character grids with specialized delta-encoding.
 
