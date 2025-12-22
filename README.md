@@ -13,20 +13,14 @@
 ## 📽️ Preview
 
 ### 🌌 Image Comparison
-<div align="center">
-  <img src="assets/galaxy.jpg" alt="Original Galaxy" width="45%" style="margin-right: 5%;">
-  <img src="assets/galaxy-ascii.png" alt="ASCII Galaxy" width="45%">
-  <br>
-  <sub><i>Original Image vs. ChromaASCII Reconstruction</i></sub>
-</div>
+| Original Image | ChromaASCII Reconstruction |
+| :---: | :---: |
+| <img src="assets/galaxy.jpg" height="300"> | <img src="assets/galaxy-ascii.png" height="300"> |
 
 ### 🎬 Video & UI Preview
-<div align="center">
-  <img src="assets/demo.gif" alt="Video Processing Preview" width="48%" style="margin-right: 2%;">
-  <img src="assets/preview.png" alt="UI Preview" width="48%">
-  <br>
-  <sub><i>Real-time video processing and the core application interface.</i></sub>
-</div>
+| Real-time Video | Application Interface |
+| :---: | :---: |
+| <img src="assets/demo.gif" width="400"> | <img src="assets/preview.png" width="400"> |
 
 ---
 
