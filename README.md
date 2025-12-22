@@ -4,10 +4,10 @@
 
 > **Transform images and videos into vibrant, colored ASCII art with zero dependencies.**
 
-![Preview](assets/image.png)
+![Preview](assets/preview.png)
 *Example of a high-resolution colored ASCII conversion.*
 
-![Bad Apple](assets/bad-apple.gif)
+![Bad Apple](assets/demo.gif)
 *Real-time video processing and encoding.*
 
 ---
