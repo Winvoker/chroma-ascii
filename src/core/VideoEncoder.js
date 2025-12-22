@@ -2,30 +2,70 @@ export class VideoEncoder {
     constructor() {
         this.frames = [];
         this.isEncoding = false;
-        this.onProgress = null;
+        this.lastFrameData = null;
+        this.framesSinceKeyframe = 0;
+        this.keyframeInterval = 30; // Every 30 frames is a full frame
     }
 
     start() {
         this.frames = [];
         this.isEncoding = true;
+        this.lastFrameData = null;
+        this.framesSinceKeyframe = 0;
     }
 
-    // frameData is now an object: { text, colors, width, height, charSize, mode }
     addFrame(frameData, time) {
         if (!this.isEncoding) return;
 
-        // Optimization: We could delta-compress colors?
-        // For now, raw storage (Array of Ints) is fine for GZIP.
-        // We strip 'text' of newlines if we want? No, keep it simple.
+        const isKeyframe = !this.lastFrameData ||
+            this.framesSinceKeyframe >= this.keyframeInterval ||
+            this.lastFrameData.width !== frameData.width ||
+            this.lastFrameData.height !== frameData.height;
 
-        // Store only essential per-frame data. 
-        // Resolution/charSize might be constant, but mode could change? 
-        // Let's assume constant metadata for now, OR store per frame.
-        // To be safe and identical to preview, store full object.
-        this.frames.push({
-            t: time,
-            d: frameData
-        });
+        let frameToStore;
+
+        if (isKeyframe) {
+            frameToStore = {
+                t: time,
+                type: 'f', // Full frame
+                d: frameData
+            };
+            this.framesSinceKeyframe = 0;
+        } else {
+            // Compute Delta
+            const colorDiff = [];
+            const textDiff = [];
+
+            // Colors Delta
+            const currentColors = frameData.colors;
+            const lastColors = this.lastFrameData.colors;
+            for (let i = 0; i < currentColors.length; i++) {
+                if (currentColors[i] !== lastColors[i]) {
+                    colorDiff.push(i, currentColors[i]); // Flat array [idx, val, idx, val...]
+                }
+            }
+
+            // Text Delta
+            const currentText = frameData.text;
+            const lastText = this.lastFrameData.text;
+            // Note: We compare characters. Since strings are immutable we iterate.
+            for (let i = 0; i < currentText.length; i++) {
+                if (currentText[i] !== lastText[i]) {
+                    textDiff.push(i, currentText[i]);
+                }
+            }
+
+            frameToStore = {
+                t: time,
+                type: 'd', // Delta frame
+                cd: colorDiff.length > 0 ? colorDiff : undefined,
+                td: textDiff.length > 0 ? textDiff : undefined
+            };
+            this.framesSinceKeyframe++;
+        }
+
+        this.frames.push(frameToStore);
+        this.lastFrameData = JSON.parse(JSON.stringify(frameData)); // Deep copy to keep state
     }
 
     async stopAndSave() {
