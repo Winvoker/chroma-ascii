@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Mode - ASCII Architect</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="./src/styles/main.css">
+</head>
+
+<body>
+    <div id="app">
+        <header class="app-header">
+            <a href="index.html" class="logo">ASCII Architect</a>
+            <nav class="nav-links">
+                <a href="image.html" class="nav-link active">🖼️ Image</a>
+                <a href="video.html" class="nav-link">🎬 Video</a>
+            </nav>
+            <div class="status-bar" id="status-bar">Ready</div>
+        </header>
+
+        <main class="main-layout">
+            <section class="panel source-panel">
+                <div class="panel-header">Source</div>
+                <div class="panel-content" id="source-container">
+                    <div class="drop-zone" id="drop-zone">
+                        <span class="icon">📁</span>
+                        <p>Drag & Drop Image or .ascv File</p>
+                        <p class="hint">or click to browse</p>
+                        <input type="file" id="file-input" hidden accept="image/*,.ascv,.ascv.gz,.json,.gz">
+                    </div>
+                    <img id="source-image" class="preview-media" hidden>
+                </div>
+            </section>
+
+            <section class="panel output-panel">
+                <div class="panel-header">
+                    <span>ASCII Output</span>
+                    <div class="output-controls">
+                        <span id="output-stats">0x0</span>
+                    </div>
+                </div>
+                <div class="panel-content ascii-container" id="ascii-container">
+                    <canvas id="ascii-canvas"></canvas>
+                </div>
+            </section>
+
+            <section class="panel controls-panel">
+                <div class="panel-header">Controls</div>
+                <div class="panel-content" id="controls-container">
+                    <!-- Controls injected by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script type="module" src="./src/image-app.js"></script>
+</body>
+
+</html>
