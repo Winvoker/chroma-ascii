@@ -14,14 +14,17 @@ export class AsciiProcessor {
             resolution: 100,
             charSize: 10,
             charset: ' .:-=+*#%@',
+            brightness: 0,
+            exposure: 1.0,
             contrast: 0,
             gamma: 1.0,
             inverted: false,
             mode: 'grayscale',
-            colorMode: 'color', // Default to color
+            colorMode: 'color',
+            colorDepth: 8, // New: 4, 8, 12, or 24
             binaryThreshold: 128,
-            binaryLight: '#',
-            binaryDark: ' '
+            binaryLight: '1',
+            binaryDark: '0'
         };
 
         // Current Frame Data
@@ -38,17 +41,28 @@ export class AsciiProcessor {
         this.isVideo = (source.tagName === 'VIDEO');
     }
 
-    applyGammaContrast(value, gamma, contrast) {
+    applyGammaContrast(value, gamma, contrast, brightness, exposure) {
         let v = value / 255;
-        v = Math.pow(v, 1 / gamma);
+
+        // 1. Exposure
+        v = v * exposure;
+
+        // 2. Brightness
+        v = v + (brightness / 100);
+
+        // 3. Gamma
+        v = Math.pow(Math.max(v, 0), 1 / gamma);
+
+        // 4. Contrast
         const factor = 1 + (contrast / 100);
         v = ((v - 0.5) * factor) + 0.5;
+
         return Math.min(Math.max(v, 0), 1) * 255;
     }
 
-    getBrightness(r, g, b, gamma, contrast, inverted) {
+    getBrightness(r, g, b, gamma, contrast, inverted, brightness, exposure) {
         let br = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-        br = this.applyGammaContrast(br, gamma, contrast);
+        br = this.applyGammaContrast(br, gamma, contrast, brightness, exposure);
         if (inverted) br = 255 - br;
         return br;
     }
@@ -89,7 +103,8 @@ export class AsciiProcessor {
         const outputHeight = (mode === 'block') ? Math.ceil(processHeight / 2) : processHeight;
 
         // Color buffer: Packed RGB (0xRRGGBB). -1 for default/mono.
-        const colors = new Int32Array(outputWidth * outputHeight);
+        let colors = (colorMode === 'color') ? new Int32Array(outputWidth * outputHeight) : null;
+        const charIndices = []; // New buffer for palette indexing
 
         let charIndex = 0;
 
@@ -110,8 +125,8 @@ export class AsciiProcessor {
                     const rT = data[offsetT]; const gT = data[offsetT + 1]; const bT = data[offsetT + 2];
                     const rB = data[offsetB]; const gB = data[offsetB + 1]; const bB = data[offsetB + 2];
 
-                    let brT = this.getBrightness(rT, gT, bT, gamma, contrast, inverted);
-                    let brB = this.getBrightness(rB, gB, bB, gamma, contrast, inverted);
+                    let brT = this.getBrightness(rT, gT, bT, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
+                    let brB = this.getBrightness(rB, gB, bB, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
 
                     const tOn = brT > 127.5;
                     const bOn = brB > 127.5;
@@ -122,56 +137,94 @@ export class AsciiProcessor {
                     else charToDraw = ' ';
 
                     if (colorMode === 'color') {
-                        // Average color usually best for block? Or pick mostly lit?
-                        // Simple average:
-                        r = Math.round((rT + rB) / 2);
-                        g = Math.round((gT + gB) / 2);
-                        b = Math.round((bT + bB) / 2);
-                        colorPacked = (r << 16) | (g << 8) | b;
+                        const depth = this.options.colorDepth;
+                        if (depth === 4) {
+                            const r1 = (rT >> 7); const g2 = (gT >> 6); const b1 = (bT >> 7);
+                            colorPacked = (r1 << 3) | (g2 << 1) | b1;
+                        } else if (depth === 8) {
+                            const r3 = (rT >> 5); const g3 = (gT >> 5); const b2 = (bT >> 6);
+                            colorPacked = (r3 << 5) | (g3 << 2) | b2;
+                        } else if (depth === 12) {
+                            const r4 = (rT >> 4); const g4 = (gT >> 4); const b4 = (bT >> 4);
+                            colorPacked = (r4 << 8) | (g4 << 4) | b4;
+                        } else {
+                            colorPacked = (rT << 16) | (gT << 8) | bT;
+                        }
                     }
 
+                    // Special indices for block mode
+                    let idx = tOn + (bOn << 1);
+                    charIndices.push(idx);
+
+                    // We need a custom charset for block mode to map indices 0,1,2,3
+                    this.currentBlockCharset = ' ▀▄█';
                 } else {
                     const offset = (y * processWidth + x) * 4;
                     r = data[offset]; g = data[offset + 1]; b = data[offset + 2];
-                    let brightness = this.getBrightness(r, g, b, gamma, contrast, inverted);
+                    let brightness = this.getBrightness(r, g, b, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
 
+                    let idx = 0;
                     if (mode === 'binary') {
                         const bayer = getBayerValue(x, y);
                         const dithered = brightness + ((bayer / 16) - 0.5) * 32;
-                        charToDraw = dithered > binaryThreshold ? binaryLight : binaryDark;
+                        idx = dithered > binaryThreshold ? 1 : 0;
+                        charToDraw = idx === 1 ? binaryLight : binaryDark;
+
+                        this.currentBinaryCharset = binaryDark + binaryLight;
                     } else if (mode === 'dither') {
                         const bayer = getBayerValue(x, y);
                         const t = (bayer + 0.5) / 16.0;
-                        let idx = Math.floor(((brightness / 255) + (t - 0.5) / charsetLen) * (charsetLen - 1));
+                        idx = Math.floor(((brightness / 255) + (t - 0.5) / charsetLen) * (charsetLen - 1));
                         idx = Math.max(0, Math.min(idx, charsetLen - 1));
                         charToDraw = charset[idx];
                     } else { // Grayscale
-                        let idx = Math.floor((brightness / 255) * (charsetLen - 1));
+                        idx = Math.floor((brightness / 255) * (charsetLen - 1));
                         idx = Math.max(0, Math.min(idx, charsetLen - 1));
                         charToDraw = charset[idx];
                     }
 
                     if (colorMode === 'color') {
-                        colorPacked = (r << 16) | (g << 8) | b;
+                        const depth = this.options.colorDepth;
+                        if (depth === 4) {
+                            const r1 = (r >> 7); const g2 = (g >> 6); const b1 = (b >> 7);
+                            colorPacked = (r1 << 3) | (g2 << 1) | b1;
+                        } else if (depth === 8) {
+                            const r3 = (r >> 5); const g3 = (g >> 5); const b2 = (b >> 6);
+                            colorPacked = (r3 << 5) | (g3 << 2) | b2;
+                        } else if (depth === 12) {
+                            const r4 = (r >> 4); const g4 = (g >> 4); const b4 = (b >> 4);
+                            colorPacked = (r4 << 8) | (g4 << 4) | b4;
+                        } else {
+                            colorPacked = (r << 16) | (g << 8) | b;
+                        }
                     }
+
+                    charIndices.push(idx);
                 }
 
                 text += charToDraw;
-                colors[charIndex++] = colorPacked;
+                if (colors) colors[charIndex++] = colorPacked;
             }
-            text += '\n'; // Marker for line break (optional, helps with simple text view)
-            // Note: colors array is essentially 2D flattened, text has \n. 
-            // We should be careful. 'render' needs to handle \n or we strip it?
-            // Let's Keep \n in text for clipboard copy support, but 'colors' corresponds to visible chars.
+            text += '\n';
         }
+
+        let finalCharset = charset;
+        if (mode === 'block') finalCharset = ' ▀▄█';
+        if (mode === 'binary') finalCharset = binaryDark + binaryLight;
 
         this.currentFrameData = {
             text: text,
-            colors: Array.from(colors), // Convert to array for JSON serialization later
+            charIndices: charIndices,
+            colors: colors ? Array.from(colors) : null,
             width: outputWidth,
             height: outputHeight,
             charSize: charSize,
-            mode: mode
+            mode: mode,
+            colorDepth: this.options.colorDepth,
+            colorMode: this.options.colorMode,
+            charset: finalCharset,
+            resolution: this.options.resolution,
+            height: this.options.resolution * (this.processCanvas.height / this.processCanvas.width)
         };
 
         // 3. Render directly if we have a context
@@ -241,15 +294,37 @@ export class AsciiProcessor {
                 continue;
             }
 
-            const col = colors[colorIndex++];
+            const col = colors ? colors[colorIndex++] : -1;
+            const colorMode = frameData.colorMode || 'mono';
 
-            if (col === -1) {
+            if (colorMode === 'rainbow') {
+                const res = frameData.resolution || 100;
+                // Proportional rainbow: x determines base hue, y adds a slight wave
+                const hue = ((x / res) * 360 + (y * 2)) % 360;
+                ctx.fillStyle = `hsl(${hue}, 90%, 65%)`;
+            } else if (col === -1) {
                 ctx.fillStyle = '#00ff88';
             } else {
-                // Unpack
-                const r = (col >> 16) & 0xFF;
-                const g = (col >> 8) & 0xFF;
-                const b = col & 0xFF;
+                const depth = frameData.colorDepth || 12;
+                let r, g, b;
+
+                if (depth === 4) {
+                    r = ((col >> 3) & 0x1) * 255;
+                    g = ((col >> 1) & 0x3) * 85;
+                    b = (col & 0x1) * 255;
+                } else if (depth === 8) {
+                    r = ((col >> 5) & 0x7) * 36;
+                    g = ((col >> 2) & 0x7) * 36;
+                    b = (col & 0x3) * 85;
+                } else if (depth === 12) {
+                    r = ((col >> 8) & 0xF) * 17;
+                    g = ((col >> 4) & 0xF) * 17;
+                    b = (col & 0xF) * 17;
+                } else {
+                    r = (col >> 16) & 0xFF;
+                    g = (col >> 8) & 0xFF;
+                    b = col & 0xFF;
+                }
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
             }
 

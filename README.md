@@ -26,8 +26,9 @@
 
 ## ✨ Key Capabilities
 
-*   **🚀 Extreme Performance** – Optimized CPU processing using `Uint32Array` color packing and raw buffer manipulation. No GPU required (but GPU-friendly).
-*   **🌈 Full RGB Fidelity** – Beyond standard grayscale. Every character carries its own 24-bit color data for stunning visual accuracy.
+*   **🚀 Performance Optimized** – Optimized CPU processing using `Uint32Array` color packing and raw buffer manipulation. No GPU required.
+*   **🌈 Full RGB Fidelity** – Beyond standard grayscale. Adaptive bit-depth control (4-bit to 12-bit) for the perfect balance of quality and size.
+*   **🦄 Rainbow Mode** – Procedural, resolution-aware spatial color mapping for vibrant, stable aesthetics without image source dependency.
 *   **🎬 Delta-Compression Engine** – Our custom `.ascv` protocol only stores changed pixels between frames, making long ASCII videos viable.
 *   **📦 Zero-Dependency Core** – Built with pure Vanilla JS. No bulky libraries, just efficient logic and native browser APIs.
 *   **🛰️ Cross-Platform Decoder** – Port your ASCII animations anywhere with the lightweight standalone decoder.
@@ -41,12 +42,13 @@ Standard media formats (MP4, PNG, JPG) are designed to compress *pixels*. **Chro
 ### 📊 Comparative Analysis
 *Measured using a single 150-resolution colored frame (Rendered at 900x900px)*
 
-| Format | Method | Payload Size | Comparison |
+| Format | Method | Payload Size | Compression |
 | :--- | :--- | :--- | :--- |
-| **🚫 Base64** | Text-Encoded ASCII | **~260 KB** | Avoid this (33% overhead) |
-| **📄 Raw JSON** | Plain Text Metadata | **~200 KB** | 100% (The Reference) |
-| **🖼️ PNG** | Pixel-Level Compression | **33.8 KB** | 16% |
-| **📟 .ASCV.GZ** | **Protocol-Level Logic** | **10.2 KB** | **5% (The Gold Standard)** |
+| **🚫 Base64** | Text-Encoded ASCII | **~260 KB** | 133% (Extreme Overhead) |
+| **📄 Raw JSON** | Plain Metadata | **~200 KB** | 100% (The Reference) |
+| ** GZIP** | Standard Compression | **~80 KB** | 40% (General Purpose) |
+| **📟 .ASCV.GZ** | **Custom Protocol** | **~12 KB** | **6% (Hyper-Efficiency)** |
+| **🌑 MONO** | **Binary Encoding** | **~2 KB** | **1% (Ultimate Optimization)** |
 
 ### 🚀 Why `.ascv` is the Superior Choice
 
@@ -65,8 +67,10 @@ In Video Mode, we don't store full frames. We store the "Color-Text Shift"—onl
 
 - **Grayscale**: Density-based mapping for that classic look.
 - **Bayer Dithering**: 4x4 ordered dithering for crisp, retro textures.
-- **Binary**: Ultra-high contrast for terminal enthusiasts.
+- **Binary**: Ultra-high contrast for terminal enthusiasts (includes adjustable **Threshold** control).
 - **Block Mode (2x1)**: Double your vertical resolution using half-block characters (`█`, `▀`, `▄`) for a pixel-perfect aesthetic.
+- **Monochrome Optimization**: Binary data packing that eliminates color overhead for pure character-based art.
+- **High-Speed UI**: Segmented controls for instantaneous mode switching.
 
 ---
 

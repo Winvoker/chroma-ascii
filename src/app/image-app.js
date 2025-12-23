@@ -13,11 +13,16 @@ class ImageApp {
 
         this.elements = {
             dropZone: document.getElementById('drop-zone'),
+            clickableSource: document.getElementById('clickable-source'),
             fileInput: document.getElementById('file-input'),
             sourceImage: document.getElementById('source-image'),
             asciiContainer: document.getElementById('ascii-container'),
             asciiCanvas: document.getElementById('ascii-canvas'),
-            controlsContainer: document.getElementById('controls-container'),
+            asciiCanvas: document.getElementById('ascii-canvas'),
+            tabsArea: document.getElementById('tabs-area'),
+            settingsArea: document.getElementById('settings-area'),
+            adjustArea: document.getElementById('adjust-area'),
+            exportArea: document.getElementById('export-area'),
             outputStats: document.getElementById('output-stats'),
             statusBar: document.getElementById('status-bar')
         };
@@ -37,9 +42,14 @@ class ImageApp {
     }
 
     setupDragAndDrop() {
-        const { dropZone, fileInput } = this.elements;
+        const { dropZone, fileInput, clickableSource } = this.elements;
 
         dropZone.addEventListener('click', () => fileInput.click());
+        clickableSource.addEventListener('click', (e) => {
+            // Only trigger if we are clicking the image/video area, not controls if any
+            fileInput.click();
+        });
+
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) this.loadFile(file);
@@ -79,6 +89,7 @@ class ImageApp {
         this.processor.source = null;
         this.hasSource = false;
         this.hasDecodedData = false;
+        this.inputFileSize = file.size; // Store original size
 
         const isAscii = file.name.endsWith('.ascv') || file.name.endsWith('.gz') ||
             file.name.endsWith('.json') || file.type === 'application/json';
@@ -183,12 +194,20 @@ class ImageApp {
     }
 
     renderControls() {
-        const container = this.elements.controlsContainer;
-        container.innerHTML = '';
+        const { tabsArea, settingsArea, adjustArea, exportArea } = this.elements;
+        if (!tabsArea || !settingsArea || !adjustArea || !exportArea) return;
+
+        tabsArea.innerHTML = '';
+        settingsArea.innerHTML = '';
+        adjustArea.innerHTML = '';
+        exportArea.innerHTML = '';
+
+        // --- Column 1: Tabs ---
 
         // Mode Toggle Tabs
         const tabContainer = document.createElement('div');
         tabContainer.className = 'tab-container';
+        tabContainer.style.marginBottom = 'var(--spacing-md)';
 
         const btnEnc = document.createElement('button');
         btnEnc.textContent = '🎨 Encoder';
@@ -202,166 +221,146 @@ class ImageApp {
 
         tabContainer.appendChild(btnEnc);
         tabContainer.appendChild(btnDec);
-        container.appendChild(tabContainer);
+        tabsArea.appendChild(tabContainer);
 
         if (this.currentMode === 'decoder') {
-            this.renderDecoderControls(container);
+            this.renderDecoderControls(settingsArea, exportArea);
         } else {
-            this.renderEncoderControls(container);
+            this.renderEncoderControls(settingsArea, adjustArea, exportArea);
         }
     }
 
-    renderDecoderControls(container) {
+    renderDecoderControls(settingsArea, exportArea) {
         const infoDiv = document.createElement('div');
         infoDiv.className = 'control-group';
         infoDiv.innerHTML = `
-            <h4>Decoder Mode</h4>
-            <p style="color: #888; font-size: 12px; margin: 8px 0;">
-                Load .ascv or .ascv.gz files to view colored ASCII art.
-            </p>
+            <h4>Playback</h4>
+            <p style="color: #888; font-size: 11px; margin: 8px 0;">Viewing ascv art.</p>
         `;
-        container.appendChild(infoDiv);
+        settingsArea.appendChild(infoDiv);
 
         if (this.hasDecodedData) {
-            // Download buttons section
-            const exportSection = document.createElement('div');
-            exportSection.className = 'control-group';
-            exportSection.innerHTML = '<h4>Download</h4>';
+            const expDiv = document.createElement('div');
+            expDiv.className = 'control-group';
+            expDiv.innerHTML = '<h4>Export</h4>';
 
             const downloadPngBtn = document.createElement('button');
-            downloadPngBtn.textContent = '📥 Download as PNG';
+            downloadPngBtn.textContent = '📥 Save as PNG';
             downloadPngBtn.className = 'primary';
             downloadPngBtn.onclick = () => this.downloadDecodedAsPng();
-            exportSection.appendChild(downloadPngBtn);
-
-            container.appendChild(exportSection);
+            expDiv.appendChild(downloadPngBtn);
+            exportArea.appendChild(expDiv);
         }
-
-        // Reset button
-        const resetSection = document.createElement('div');
-        resetSection.className = 'control-group';
-
-        const resetBtn = document.createElement('button');
-        resetBtn.textContent = '🔄 Load New File';
-        resetBtn.onclick = () => this.reset();
-        resetSection.appendChild(resetBtn);
-        container.appendChild(resetSection);
     }
 
-    renderEncoderControls(container) {
-        // Settings Section
+    renderEncoderControls(settingsArea, adjustArea, exportArea) {
+        // --- General Settings (Col 1) ---
         const settingsSection = document.createElement('div');
         settingsSection.className = 'control-group';
-        settingsSection.innerHTML = '<h4>Settings</h4>';
+        settingsSection.innerHTML = '<h4>General</h4>';
 
-        // Mode Select
-        this.createSelect(settingsSection, 'mode-sel', 'Mode', [
-            { value: 'grayscale', label: 'Grayscale' },
-            { value: 'dither', label: 'Dither (Bayer)' },
-            { value: 'binary', label: 'Binary' },
-            { value: 'block', label: 'Block (2x1)' }
-        ], this.processor.options.mode, (v) => {
-            this.processor.options.mode = v;
-            this.processIfReady();
-        });
+        const isMono = this.processor.options.colorMode === 'mono' || this.processor.options.colorMode === 'rainbow';
 
-        // Color Mode
-        this.createSelect(settingsSection, 'color-sel', 'Color', [
-            { value: 'color', label: 'Full Color' },
-            { value: 'mono', label: 'Monochrome' }
+        this.createButtonGroup(settingsSection, 'mode-grp', 'Process Mode', [
+            { value: 'grayscale', label: 'Gray' },
+            { value: 'dither', label: 'Dith' },
+            { value: 'binary', label: 'Bin' },
+            { value: 'block', label: 'Blok' }
+        ], this.processor.options.mode, (v) => { this.processor.options.mode = v; this.processIfReady(); this.renderControls(); });
+
+        this.createButtonGroup(settingsSection, 'color-grp', 'Color Palette', [
+            { value: 'color', label: 'Color' },
+            { value: 'mono', label: 'Mono' },
+            { value: 'rainbow', label: 'Rain' }
         ], this.processor.options.colorMode, (v) => {
             this.processor.options.colorMode = v;
             this.processIfReady();
+            this.renderControls();
         });
 
-        // Resolution
-        this.createSlider(settingsSection, 'res', 'Resolution', 20, 500,
-            this.processor.options.resolution, 1, (v) => {
-                this.processor.options.resolution = v;
-                this.processIfReady();
-            });
+        this.createButtonGroup(settingsSection, 'depth-grp', 'Bit Depth', [
+            { value: '4', label: '4-bit' },
+            { value: '8', label: '8-bit' },
+            { value: '12', label: '12-bit' }
+        ], this.processor.options.colorDepth.toString(), (v) => { this.processor.options.colorDepth = parseInt(v); this.processIfReady(); }, isMono);
 
-        // Char Size
-        this.createSlider(settingsSection, 'size', 'Char Size', 4, 32,
-            this.processor.options.charSize, 1, (v) => {
-                this.processor.options.charSize = v;
-                this.processIfReady();
-            });
+        if (this.processor.options.mode === 'binary' || this.processor.options.mode === 'dither') {
+            this.createSlider(settingsSection, 'threshold', 'Binary Thresh', 0, 255, this.processor.options.binaryThreshold, 1, (v) => { this.processor.options.binaryThreshold = v; this.processIfReady(); });
+        }
 
-        container.appendChild(settingsSection);
+        this.createSlider(settingsSection, 'res', 'Res', 20, 500, this.processor.options.resolution, 1, (v) => { this.processor.options.resolution = v; this.processIfReady(); });
+        this.createSlider(settingsSection, 'size', 'Size', 4, 32, this.processor.options.charSize, 1, (v) => { this.processor.options.charSize = v; this.processIfReady(); });
 
-        // Adjustments Section
+        settingsArea.appendChild(settingsSection);
+
+        // --- Adjust (Col 2 Bottom) ---
         const adjustSection = document.createElement('div');
         adjustSection.className = 'control-group';
-        adjustSection.innerHTML = '<h4>Adjustments</h4>';
+        adjustSection.innerHTML = '<h4>Adjust</h4>';
 
-        this.createSlider(adjustSection, 'contrast', 'Contrast', -100, 100,
-            this.processor.options.contrast, 1, (v) => {
-                this.processor.options.contrast = v;
-                this.processIfReady();
-            });
+        this.createSlider(adjustSection, 'contrast', 'Contrast', -100, 100, this.processor.options.contrast, 1, (v) => { this.processor.options.contrast = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'brightness', 'Bright', -100, 100, this.processor.options.brightness, 1, (v) => { this.processor.options.brightness = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'exposure', 'Exp', 0.1, 5.0, this.processor.options.exposure, 0.1, (v) => { this.processor.options.exposure = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 10.0, this.processor.options.gamma, 0.1, (v) => { this.processor.options.gamma = v; this.processIfReady(); });
+        this.createCheckbox(adjustSection, 'inverted', 'Invert', this.processor.options.inverted, (v) => { this.processor.options.inverted = v; this.processIfReady(); });
 
-        this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 3.0,
-            this.processor.options.gamma, 0.1, (v) => {
-                this.processor.options.gamma = v;
-                this.processIfReady();
-            });
+        adjustArea.appendChild(adjustSection);
 
-        container.appendChild(adjustSection);
-
-        // Export Section
+        // --- Export (Col 1 Bottom) ---
         const exportSection = document.createElement('div');
         exportSection.className = 'control-group';
         exportSection.innerHTML = '<h4>Export</h4>';
 
-        // Download PNG
         const downloadPngBtn = document.createElement('button');
-        downloadPngBtn.textContent = '📥 Download as PNG';
+        downloadPngBtn.textContent = '📥 Save PNG';
         downloadPngBtn.className = 'primary';
         downloadPngBtn.onclick = () => this.downloadAsPng();
         downloadPngBtn.disabled = !this.hasSource;
         exportSection.appendChild(downloadPngBtn);
 
-        // Download Base64 (.txt) - The "Wrong Way" comparison
-        const downloadB64Btn = document.createElement('button');
-        downloadB64Btn.textContent = '📄 Export as Base64 (.txt)';
-        downloadB64Btn.style.marginTop = '8px';
-        downloadB64Btn.style.fontSize = '11px';
-        downloadB64Btn.style.opacity = '0.7';
-        downloadB64Btn.onclick = () => this.downloadAsBase64();
-        downloadB64Btn.disabled = !this.hasSource;
-        exportSection.appendChild(downloadB64Btn);
-
-        // Encode to ASCV
         const encodeBtn = document.createElement('button');
-        encodeBtn.textContent = '💾 Encode to .ascv';
+        encodeBtn.textContent = '💾 Save .ascv';
         encodeBtn.style.marginTop = '8px';
         encodeBtn.onclick = () => this.encodeImage();
         encodeBtn.disabled = !this.hasSource;
         exportSection.appendChild(encodeBtn);
 
-        // Estimation display
+        // Est inside export
         const estDiv = document.createElement('div');
-        estDiv.id = 'est-display';
-        estDiv.style.marginTop = '10px';
-        estDiv.style.fontSize = '11px';
-        estDiv.style.color = '#888';
-        estDiv.style.lineHeight = '1.6';
+        estDiv.id = 'est-display-js';
+        estDiv.className = 'estimation-box';
         estDiv.innerHTML = 'Est. Size: --';
         exportSection.appendChild(estDiv);
+
+        exportArea.appendChild(exportSection);
         this.updateEstimation();
+    }
 
-        container.appendChild(exportSection);
+    createButtonGroup(parent, id, label, options, currentVal, onChange, disabled = false) {
+        const div = document.createElement('div');
+        div.className = 'control-item';
+        div.innerHTML = `<label>${label}</label>`;
 
-        // Reset Section
-        const resetSection = document.createElement('div');
-        resetSection.className = 'control-group';
+        const group = document.createElement('div');
+        group.className = 'button-group';
+        if (disabled) group.style.opacity = '0.5';
 
-        const resetBtn = document.createElement('button');
-        resetBtn.textContent = '🔄 Load New Image';
-        resetBtn.onclick = () => this.reset();
-        resetSection.appendChild(resetBtn);
-        container.appendChild(resetSection);
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = `group-btn ${opt.value === currentVal ? 'active' : ''}`;
+            btn.textContent = opt.label;
+            btn.disabled = disabled;
+            btn.onclick = () => {
+                if (btn.classList.contains('active')) return;
+                group.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                onChange(opt.value);
+            };
+            group.appendChild(btn);
+        });
+
+        div.appendChild(group);
+        parent.appendChild(div);
     }
 
     createSlider(parent, id, label, min, max, val, step, onChange) {
@@ -381,13 +380,35 @@ class ImageApp {
         });
     }
 
-    createSelect(parent, id, label, options, val, onChange) {
+    createCheckbox(parent, id, label, val, onChange) {
+        const div = document.createElement('div');
+        div.className = 'control-item checkbox-item';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '10px';
+        div.style.cursor = 'pointer';
+        div.style.marginTop = '10px';
+        div.innerHTML = `
+            <input type="checkbox" id="${id}" ${val ? 'checked' : ''} style="cursor: pointer; width: 18px; height: 18px; accent-color: var(--accent-primary);">
+            <label for="${id}" style="cursor: pointer; margin: 0;">${label}</label>
+        `;
+        parent.appendChild(div);
+
+        const input = div.querySelector('input');
+        input.addEventListener('change', (e) => {
+            onChange(e.target.checked);
+        });
+    }
+
+    createSelect(parent, id, label, options, val, onChange, disabled = false) {
         const div = document.createElement('div');
         div.className = 'control-item';
         div.innerHTML = `<label>${label}</label>`;
 
         const sel = document.createElement('select');
         sel.id = id;
+        sel.disabled = disabled;
+        if (disabled) sel.style.opacity = '0.5';
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
@@ -410,42 +431,67 @@ class ImageApp {
     }
 
     async updateEstimation() {
-        const estDiv = document.getElementById('est-display');
-        if (!estDiv || !this.processor.currentFrameData) {
-            if (estDiv) estDiv.innerHTML = 'Est. Size: --';
-            return;
-        }
+        const { estDisplay } = this.elements;
+        if (!estDisplay) return;
 
-        const frameData = this.processor.currentFrameData;
-        const jsonStr = JSON.stringify({
-            meta: { version: 2, frameCount: 1 },
-            frames: [{ t: 0, d: frameData }]
-        });
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const rawSize = blob.size;
+        const data = this.processor.currentFrameData;
+        const inputSize = this.inputFileSize || 0;
 
-        let gzipSize = 0;
-        try {
-            const stream = blob.stream().pipeThrough(new CompressionStream('gzip'));
-            const compressedBlob = await new Response(stream).blob();
-            gzipSize = compressedBlob.size;
-        } catch (e) {
-            console.warn('GZIP calculation failed', e);
-            gzipSize = Math.round(rawSize * 0.3); // Fallback
-        }
-
-        const format = (b) => {
-            if (b < 1024) return b + ' B';
-            if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-            return (b / 1024 / 1024).toFixed(2) + ' MB';
+        const formatSize = (bytes) => {
+            if (!bytes || bytes <= 0) return 'n/a';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
         };
-        estDiv.innerHTML = `
-            <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border-left: 3px solid var(--accent-primary);">
-                <strong>Efficiency Comparison:</strong><br>
-                🚫 Base64: <span style="color: #ff4d4d">${format(rawSize * 1.33)} (+33%)</span><br>
-                📄 Raw JSON: <span style="color: #ffa500">${format(rawSize)}</span><br>
-                📦 <strong>.ASCV GZIP: <span style="color: #00ff88">${format(gzipSize)} (-${Math.round((1 - gzipSize / rawSize) * 100)}%)</span></strong>
-            </div>
+
+        let ascvSize = 0;
+        let jsonSize = 0;
+        let gzSize = 0;
+        let b64Size = 0;
+
+        if (data) {
+            const json = JSON.stringify({
+                meta: { version: 4, frameCount: 1 },
+                frames: [{ t: 0, d: data }]
+            });
+            jsonSize = json.length;
+            b64Size = btoa(unescape(encodeURIComponent(json))).length;
+
+            // ASCV estimate (charIndices + selective colors + metadata)
+            ascvSize = data.charIndices ? data.charIndices.length : 0;
+            if (data.colors) ascvSize += data.colors.length * 2;
+            ascvSize += 100; // Metadata overhead
+
+            gzSize = Math.floor(ascvSize * 0.4); // Rough GZIP for .ascv.gz
+        }
+
+        estDisplay.innerHTML = `
+            <table>
+                <tr class="header-row">
+                    <td>Efficiency</td>
+                    <td>Size</td>
+                </tr>
+                <tr>
+                    <td>Original</td>
+                    <td>${formatSize(inputSize)}</td>
+                </tr>
+                <tr>
+                    <td>.ascv (Custom)</td>
+                    <td>${formatSize(gzSize)}</td>
+                </tr>
+                <tr>
+                    <td>JSON (Raw)</td>
+                    <td>${formatSize(jsonSize)}</td>
+                </tr>
+                <tr>
+                    <td>GZIP (Comp.)</td>
+                    <td>${formatSize(Math.floor(jsonSize * 0.4))}</td>
+                </tr>
+                <tr>
+                    <td>Base64 (Text)</td>
+                    <td>${formatSize(b64Size)}</td>
+                </tr>
+            </table>
         `;
     }
 

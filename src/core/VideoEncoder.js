@@ -39,19 +39,22 @@ export class VideoEncoder {
             // Colors Delta
             const currentColors = frameData.colors;
             const lastColors = this.lastFrameData.colors;
-            for (let i = 0; i < currentColors.length; i++) {
-                if (currentColors[i] !== lastColors[i]) {
-                    colorDiff.push(i, currentColors[i]); // Flat array [idx, val, idx, val...]
+
+            if (currentColors && lastColors) {
+                for (let i = 0; i < currentColors.length; i++) {
+                    if (currentColors[i] !== lastColors[i]) {
+                        colorDiff.push(i, currentColors[i]);
+                    }
                 }
             }
 
-            // Text Delta
-            const currentText = frameData.text;
-            const lastText = this.lastFrameData.text;
-            // Note: We compare characters. Since strings are immutable we iterate.
-            for (let i = 0; i < currentText.length; i++) {
-                if (currentText[i] !== lastText[i]) {
-                    textDiff.push(i, currentText[i]);
+            // Text Delta (Using Palette Indices)
+            const currentIndices = frameData.charIndices;
+            const lastIndices = this.lastFrameData.charIndices;
+
+            for (let i = 0; i < currentIndices.length; i++) {
+                if (currentIndices[i] !== lastIndices[i]) {
+                    textDiff.push(i, currentIndices[i]); // Store index instead of char
                 }
             }
 
@@ -59,7 +62,7 @@ export class VideoEncoder {
                 t: time,
                 type: 'd', // Delta frame
                 cd: colorDiff.length > 0 ? colorDiff : undefined,
-                td: textDiff.length > 0 ? textDiff : undefined
+                id: textDiff.length > 0 ? textDiff : undefined // 'id' for Index Delta
             };
             this.framesSinceKeyframe++;
         }
@@ -73,7 +76,7 @@ export class VideoEncoder {
 
         const data = {
             meta: {
-                version: 2, // Color support
+                version: 4, // 8-bit (3-3-2) Color + Palette Indexing support
                 date: new Date().toISOString(),
                 frameCount: this.frames.length
             },

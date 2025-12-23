@@ -16,11 +16,15 @@ class VideoApp {
 
         this.elements = {
             dropZone: document.getElementById('drop-zone'),
+            clickableSource: document.getElementById('clickable-source'),
             fileInput: document.getElementById('file-input'),
             sourceVideo: document.getElementById('source-video'),
             asciiContainer: document.getElementById('ascii-container'),
             asciiCanvas: document.getElementById('ascii-canvas'),
-            controlsContainer: document.getElementById('controls-container'),
+            tabsArea: document.getElementById('tabs-area'),
+            settingsArea: document.getElementById('settings-area'),
+            adjustArea: document.getElementById('adjust-area'),
+            exportArea: document.getElementById('export-area'),
             outputStats: document.getElementById('output-stats'),
             statusBar: document.getElementById('status-bar')
         };
@@ -43,9 +47,13 @@ class VideoApp {
     }
 
     setupDragAndDrop() {
-        const { dropZone, fileInput } = this.elements;
+        const { dropZone, fileInput, clickableSource } = this.elements;
 
         dropZone.addEventListener('click', () => fileInput.click());
+        clickableSource.addEventListener('click', (e) => {
+            fileInput.click();
+        });
+
         fileInput.addEventListener('change', (e) => {
             const file = e.target.files[0];
             if (file) this.loadFile(file);
@@ -92,6 +100,7 @@ class VideoApp {
         this.processor.source = null;
         this.hasSource = false;
         this.hasDecodedData = false;
+        this.inputFileSize = file.size;
 
         const isAscii = file.name.endsWith('.ascv') || file.name.endsWith('.gz') ||
             file.name.endsWith('.json') || file.type === 'application/json';
@@ -199,7 +208,7 @@ class VideoApp {
                 // Only update estimation if it's been a while (e.g. 1 second)
                 if (!this.lastEstimationTime || timestamp - this.lastEstimationTime > 1000) {
                     this.lastEstimationTime = timestamp;
-                    this.updateEstimationDisplay();
+                    this.updateEstimation();
                 }
             }
         }
@@ -220,15 +229,21 @@ class VideoApp {
     }
 
     renderControls() {
-        const container = this.elements.controlsContainer;
-        container.innerHTML = '';
+        const { tabsArea, settingsArea, adjustArea, exportArea } = this.elements;
+        if (!tabsArea || !settingsArea || !adjustArea || !exportArea) return;
 
-        // Mode Toggle Tabs
+        tabsArea.innerHTML = '';
+        settingsArea.innerHTML = '';
+        adjustArea.innerHTML = '';
+        exportArea.innerHTML = '';
+
+        // Tabs
         const tabContainer = document.createElement('div');
         tabContainer.className = 'tab-container';
+        tabContainer.style.marginBottom = 'var(--spacing-md)';
 
         const btnEnc = document.createElement('button');
-        btnEnc.textContent = '🎨 Encoder';
+        btnEnc.textContent = '🎥 Encoder';
         btnEnc.className = this.currentMode === 'encoder' ? 'tab-btn active' : 'tab-btn';
         btnEnc.onclick = () => this.switchMode('encoder');
 
@@ -239,25 +254,23 @@ class VideoApp {
 
         tabContainer.appendChild(btnEnc);
         tabContainer.appendChild(btnDec);
-        container.appendChild(tabContainer);
+        tabsArea.appendChild(tabContainer);
 
         if (this.currentMode === 'decoder') {
-            this.renderDecoderControls(container);
+            this.renderDecoderControls(settingsArea, exportArea);
         } else {
-            this.renderEncoderControls(container);
+            this.renderEncoderControls(settingsArea, adjustArea, exportArea);
         }
     }
 
-    renderDecoderControls(container) {
+    renderDecoderControls(settingsArea, exportArea) {
         const infoDiv = document.createElement('div');
         infoDiv.className = 'control-group';
         infoDiv.innerHTML = `
-            <h4>Decoder Mode</h4>
-            <p style="color: #888; font-size: 12px; margin: 8px 0;">
-                Load .ascv or .ascv.gz files to view colored ASCII video.
-            </p>
+            <h4>Decoder</h4>
+            <p style="color: #888; font-size: 11px; margin: 8px 0;">Playing .ascv stream.</p>
         `;
-        container.appendChild(infoDiv);
+        settingsArea.appendChild(infoDiv);
 
         if (this.hasDecodedData) {
             // Playback controls
@@ -279,231 +292,222 @@ class VideoApp {
             };
             playbackSection.appendChild(pauseBtn);
 
-            container.appendChild(playbackSection);
+            settingsArea.appendChild(playbackSection);
 
-            // Download buttons section
-            const exportSection = document.createElement('div');
-            exportSection.className = 'control-group';
-            exportSection.innerHTML = '<h4>Download</h4>';
+            const expSection = document.createElement('div');
+            expSection.className = 'control-group';
+            expSection.innerHTML = '<h4>Download</h4>';
 
-            // Download as MP4/WebM video
-            const downloadVideoBtn = document.createElement('button');
-            downloadVideoBtn.textContent = '🎬 Download as Video (WebM)';
-            downloadVideoBtn.className = 'primary';
-            downloadVideoBtn.onclick = () => this.downloadDecodedAsVideo(downloadVideoBtn);
-            exportSection.appendChild(downloadVideoBtn);
+            const downloadGifBtn = document.createElement('button');
+            downloadGifBtn.textContent = '🎬 Download as GIF';
+            downloadGifBtn.className = 'primary';
+            downloadGifBtn.onclick = () => this.downloadDecodedAsGif(downloadGifBtn);
+            expSection.appendChild(downloadGifBtn);
 
-            // Download current frame as PNG
             const downloadPngBtn = document.createElement('button');
-            downloadPngBtn.textContent = '📸 Download Frame as PNG';
+            downloadPngBtn.textContent = '📥 Save PNG';
             downloadPngBtn.style.marginTop = '8px';
             downloadPngBtn.onclick = () => this.downloadDecodedFrameAsPng();
-            exportSection.appendChild(downloadPngBtn);
-
-            container.appendChild(exportSection);
+            expSection.appendChild(downloadPngBtn);
+            exportArea.appendChild(expSection);
         }
-
-        // Reset button
-        const resetSection = document.createElement('div');
-        resetSection.className = 'control-group';
-
-        const resetBtn = document.createElement('button');
-        resetBtn.textContent = '🔄 Load New File';
-        resetBtn.onclick = () => this.reset();
-        resetSection.appendChild(resetBtn);
-        container.appendChild(resetSection);
     }
 
-    renderEncoderControls(container) {
-        // Settings Section
+    renderEncoderControls(settingsArea, adjustArea, exportArea) {
+        // --- General Settings (Col 2) ---
         const settingsSection = document.createElement('div');
         settingsSection.className = 'control-group';
-        settingsSection.innerHTML = '<h4>Settings</h4>';
+        settingsSection.innerHTML = '<h4>General</h4>';
 
-        // Mode Select
-        this.createSelect(settingsSection, 'mode-sel', 'Mode', [
-            { value: 'grayscale', label: 'Grayscale' },
-            { value: 'dither', label: 'Dither (Bayer)' },
-            { value: 'binary', label: 'Binary' },
-            { value: 'block', label: 'Block (2x1)' }
-        ], this.processor.options.mode, (v) => {
-            this.processor.options.mode = v;
-            this.processIfReady();
-        });
+        const isMono = this.processor.options.colorMode === 'mono' || this.processor.options.colorMode === 'rainbow';
 
-        // Color Mode
-        this.createSelect(settingsSection, 'color-sel', 'Color', [
-            { value: 'color', label: 'Full Color' },
-            { value: 'mono', label: 'Monochrome' }
+        this.createButtonGroup(settingsSection, 'mode-grp', 'Process Mode', [
+            { value: 'grayscale', label: 'Gray' },
+            { value: 'dither', label: 'Dith' },
+            { value: 'binary', label: 'Bin' },
+            { value: 'block', label: 'Blok' }
+        ], this.processor.options.mode, (v) => { this.processor.options.mode = v; this.processIfReady(); this.renderControls(); });
+
+        this.createButtonGroup(settingsSection, 'color-grp', 'Color Palette', [
+            { value: 'color', label: 'Color' },
+            { value: 'mono', label: 'Mono' },
+            { value: 'rainbow', label: 'Rain' }
         ], this.processor.options.colorMode, (v) => {
             this.processor.options.colorMode = v;
             this.processIfReady();
+            this.renderControls();
         });
 
-        // Resolution
-        this.createSlider(settingsSection, 'res', 'Resolution', 20, 500,
-            this.processor.options.resolution, 1, (v) => {
-                this.processor.options.resolution = v;
-                this.processIfReady();
-            });
+        this.createButtonGroup(settingsSection, 'depth-grp', 'Bit Depth', [
+            { value: '4', label: '4-bit' },
+            { value: '8', label: '8-bit' },
+            { value: '12', label: '12-bit' }
+        ], this.processor.options.colorDepth.toString(), (v) => { this.processor.options.colorDepth = parseInt(v); this.processIfReady(); }, isMono);
 
-        // Char Size
-        this.createSlider(settingsSection, 'size', 'Char Size', 4, 32,
-            this.processor.options.charSize, 1, (v) => {
-                this.processor.options.charSize = v;
-                this.processIfReady();
-            });
+        if (this.processor.options.mode === 'binary' || this.processor.options.mode === 'dither') {
+            this.createSlider(settingsSection, 'threshold', 'Binary Thresh', 0, 255, this.processor.options.binaryThreshold, 1, (v) => { this.processor.options.binaryThreshold = v; this.processIfReady(); });
+        }
 
-        container.appendChild(settingsSection);
+        this.createSlider(settingsSection, 'res', 'Res', 20, 500, this.processor.options.resolution, 1, (v) => { this.processor.options.resolution = v; this.processIfReady(); });
+        this.createSlider(settingsSection, 'size', 'Size', 4, 32, this.processor.options.charSize, 1, (v) => { this.processor.options.charSize = v; this.processIfReady(); });
 
-        // Adjustments Section
+        settingsArea.appendChild(settingsSection);
+
+        // --- Adjust (Col 2) ---
         const adjustSection = document.createElement('div');
         adjustSection.className = 'control-group';
-        adjustSection.innerHTML = '<h4>Adjustments</h4>';
+        adjustSection.innerHTML = '<h4>Adjust</h4>';
 
-        this.createSlider(adjustSection, 'contrast', 'Contrast', -100, 100,
-            this.processor.options.contrast, 1, (v) => {
-                this.processor.options.contrast = v;
-                this.processIfReady();
-            });
+        this.createSlider(adjustSection, 'contrast', 'Contrast', -100, 100, this.processor.options.contrast, 1, (v) => { this.processor.options.contrast = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'brightness', 'Bright', -100, 100, this.processor.options.brightness, 1, (v) => { this.processor.options.brightness = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'exposure', 'Exp', 0.1, 5.0, this.processor.options.exposure, 0.1, (v) => { this.processor.options.exposure = v; this.processIfReady(); });
+        this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 10.0, this.processor.options.gamma, 0.1, (v) => { this.processor.options.gamma = v; this.processIfReady(); });
+        this.createCheckbox(adjustSection, 'inverted', 'Invert', this.processor.options.inverted, (v) => { this.processor.options.inverted = v; this.processIfReady(); });
 
-        this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 3.0,
-            this.processor.options.gamma, 0.1, (v) => {
-                this.processor.options.gamma = v;
-                this.processIfReady();
-            });
+        adjustArea.appendChild(adjustSection);
 
-        container.appendChild(adjustSection);
-
-        // Export Section
+        // --- Export (Col 1 Bottom) ---
         const exportSection = document.createElement('div');
         exportSection.className = 'control-group';
         exportSection.innerHTML = '<h4>Export</h4>';
 
-        // Target FPS
-        this.createSlider(exportSection, 'target-fps', 'Target FPS', 1, 60,
-            this.targetFps, 1, (v) => {
-                this.targetFps = v;
-            });
+        this.createSlider(exportSection, 'target-fps', 'FPS', 1, 60, this.targetFps, 1, (v) => { this.targetFps = v; this.updateEstimation(); });
 
-        // Download current frame as PNG
         const downloadPngBtn = document.createElement('button');
-        downloadPngBtn.textContent = '📥 Download Frame as PNG';
+        downloadPngBtn.textContent = '📥 Save PNG';
+        downloadPngBtn.className = 'primary';
         downloadPngBtn.onclick = () => this.downloadFrameAsPng();
         downloadPngBtn.disabled = !this.hasSource;
-        downloadPngBtn.style.marginTop = '10px';
         exportSection.appendChild(downloadPngBtn);
 
-        // Download Base64 (.txt)
-        const downloadB64Btn = document.createElement('button');
-        downloadB64Btn.textContent = '📄 Export Frame as Base64 (.txt)';
-        downloadB64Btn.style.marginTop = '8px';
-        downloadB64Btn.style.fontSize = '11px';
-        downloadB64Btn.style.opacity = '0.7';
-        downloadB64Btn.onclick = () => this.downloadFrameAsBase64();
-        downloadB64Btn.disabled = !this.hasSource;
-        exportSection.appendChild(downloadB64Btn);
-
-        // Encode to ASCV
         const encodeBtn = document.createElement('button');
-        encodeBtn.textContent = '💾 Encode Video to .ascv';
+        encodeBtn.textContent = '💾 Save as .ascv';
         encodeBtn.className = 'primary';
-        encodeBtn.style.marginTop = '8px';
         encodeBtn.id = 'encode-btn';
+        encodeBtn.style.marginTop = '8px';
         encodeBtn.onclick = () => this.encodeVideo(encodeBtn);
         encodeBtn.disabled = !this.hasSource;
         exportSection.appendChild(encodeBtn);
 
-        // Estimation display
+        // Est inside export
         const estDiv = document.createElement('div');
-        estDiv.id = 'est-display';
-        estDiv.style.marginTop = '10px';
-        estDiv.style.fontSize = '11px';
-        estDiv.style.color = '#888';
+        estDiv.id = 'est-display-js';
+        estDiv.className = 'estimation-box';
         estDiv.innerHTML = 'Est. Size: --';
         exportSection.appendChild(estDiv);
-        this.updateEstimation(estDiv);
 
-        container.appendChild(exportSection);
+        exportArea.appendChild(exportSection);
 
-        // Video Controls Section
         if (this.hasSource) {
-            const videoSection = document.createElement('div');
-            videoSection.className = 'control-group';
-            videoSection.innerHTML = '<h4>Video Controls</h4>';
-
+            const pbSection = document.createElement('div');
+            pbSection.className = 'control-group';
+            pbSection.innerHTML = '<h4>Playback</h4>';
             const playPauseBtn = document.createElement('button');
-            playPauseBtn.textContent = this.elements.sourceVideo.paused ? '▶️ Play' : '⏸️ Pause';
+            playPauseBtn.textContent = this.elements.sourceVideo.paused ? '▶ Play' : '⏸ Pause';
             playPauseBtn.onclick = () => {
-                if (this.elements.sourceVideo.paused) {
-                    this.elements.sourceVideo.play();
-                } else {
-                    this.elements.sourceVideo.pause();
-                }
-                this.renderControls();
+                if (this.elements.sourceVideo.paused) this.elements.sourceVideo.play(); else this.elements.sourceVideo.pause();
+                playPauseBtn.textContent = this.elements.sourceVideo.paused ? '▶ Play' : '⏸ Pause';
             };
-            videoSection.appendChild(playPauseBtn);
-
-            container.appendChild(videoSection);
+            pbSection.appendChild(playPauseBtn);
+            settingsArea.appendChild(pbSection);
         }
 
-        // Reset Section
-        const resetSection = document.createElement('div');
-        resetSection.className = 'control-group';
-
-        const resetBtn = document.createElement('button');
-        resetBtn.textContent = '🔄 Load New Video';
-        resetBtn.onclick = () => this.reset();
-        resetSection.appendChild(resetBtn);
-        container.appendChild(resetSection);
+        this.updateEstimation();
     }
 
     processIfReady() {
         if (this.hasSource) {
             this.processor.process();
             this.updateEncoderStats();
-            this.updateEstimationDisplay();
+            this.updateEstimation();
         }
     }
 
-    updateEstimation() {
-        // Initial call
-        this.updateEstimationDisplay();
-    }
+    async updateEstimation() {
+        const { estDisplay } = this.elements;
+        if (!estDisplay) return;
 
-    updateEstimationDisplay() {
-        // Optimization: Only update once in a while or when requested
-        const estDiv = document.getElementById('est-display');
-        if (!estDiv) return;
+        const data = this.processor.currentFrameData;
+        const inputSize = this.inputFileSize || 0;
+        const formatSize = (bytes) => {
+            if (!bytes || bytes <= 0) return 'n/a';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        };
 
-        if (this.currentMode === 'encoder' && this.processor.currentFrameData) {
-            const frameSize = new Blob([JSON.stringify(this.processor.currentFrameData)]).size;
-            const fps = this.targetFps;
+        let ascvSize = 0;
+        let rawTotal = 0;
+        let estDelta = 0;
+        let estGzip = 0;
+
+        if (data) {
+            const frameSize = JSON.stringify(data).length;
+            const fps = this.targetFps || 30;
             const duration = this.elements.sourceVideo?.duration || 1;
             const frameCount = Math.floor(fps * duration);
-            const estimatedTotal = frameSize * frameCount;
-            const estDelta = Math.round(estimatedTotal * 0.4);
-            const estGzip = Math.round(estimatedTotal * 0.08);
+            rawTotal = frameSize * frameCount;
 
-            const format = (b) => {
-                if (b < 1024) return b + ' B';
-                if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
-                return (b / 1024 / 1024).toFixed(2) + ' MB';
-            };
-
-            estDiv.innerHTML = `
-                <div style="background: rgba(0,0,0,0.2); padding: 8px; border-radius: 4px; border-left: 3px solid var(--accent-primary);">
-                    <strong>Storage Comparison:</strong><br>
-                    🎞️ Frames: ${frameCount} @ ${fps}fps<br>
-                    🚫 Base64: <span style="color: #ff4d4d">${format(estimatedTotal * 1.33)}</span><br>
-                    📄 Raw JSON: <span style="color: #ffa500">${format(estimatedTotal)}</span><br>
-                    ⚡ Delta Optimized: <span style="color: #ffcc00">${format(estDelta)}</span><br>
-                    📦 <strong>Final .ASCV: <span style="color: #00ff88">${format(estGzip)}</span></strong>
-                </div>
-            `;
-        } else {
-            estDiv.innerHTML = 'Est. Size: --';
+            // Delta is usually 40% of Raw, and GZIP 15% of Delta for video
+            estDelta = Math.round(rawTotal * 0.4);
+            estGzip = Math.round(estDelta * 0.15);
         }
+
+        estDisplay.innerHTML = `
+            <table>
+                <tr class="header-row">
+                    <td>Efficiency</td>
+                    <td>Size</td>
+                </tr>
+                <tr>
+                    <td>Original</td>
+                    <td>${formatSize(inputSize)}</td>
+                </tr>
+                <tr>
+                    <td>.ascv (Custom)</td>
+                    <td>${formatSize(estGzip)}</td>
+                </tr>
+                <tr>
+                    <td>JSON (Raw)</td>
+                    <td>${formatSize(rawTotal)}</td>
+                </tr>
+                <tr>
+                    <td>Delta (Enc.)</td>
+                    <td>${formatSize(estDelta)}</td>
+                </tr>
+                <tr>
+                    <td>GZIP (Comp.)</td>
+                    <td>${formatSize(estGzip)}</td>
+                </tr>
+            </table>
+        `;
+    }
+
+    createButtonGroup(parent, id, label, options, currentVal, onChange, disabled = false) {
+        const div = document.createElement('div');
+        div.className = 'control-item';
+        div.innerHTML = `<label>${label}</label>`;
+
+        const group = document.createElement('div');
+        group.className = 'button-group';
+        if (disabled) group.style.opacity = '0.5';
+
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = `group-btn ${opt.value === currentVal ? 'active' : ''}`;
+            btn.textContent = opt.label;
+            btn.disabled = disabled;
+            btn.onclick = () => {
+                if (btn.classList.contains('active')) return;
+                group.querySelectorAll('.group-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                onChange(opt.value);
+            };
+            group.appendChild(btn);
+        });
+
+        div.appendChild(group);
+        parent.appendChild(div);
     }
 
     createSlider(parent, id, label, min, max, val, step, onChange) {
@@ -523,13 +527,35 @@ class VideoApp {
         });
     }
 
-    createSelect(parent, id, label, options, val, onChange) {
+    createCheckbox(parent, id, label, val, onChange) {
+        const div = document.createElement('div');
+        div.className = 'control-item checkbox-item';
+        div.style.display = 'flex';
+        div.style.alignItems = 'center';
+        div.style.gap = '10px';
+        div.style.cursor = 'pointer';
+        div.style.marginTop = '10px';
+        div.innerHTML = `
+            <input type="checkbox" id="${id}" ${val ? 'checked' : ''} style="cursor: pointer; width: 18px; height: 18px; accent-color: var(--accent-primary);">
+            <label for="${id}" style="cursor: pointer; margin: 0;">${label}</label>
+        `;
+        parent.appendChild(div);
+
+        const input = div.querySelector('input');
+        input.addEventListener('change', (e) => {
+            onChange(e.target.checked);
+        });
+    }
+
+    createSelect(parent, id, label, options, val, onChange, disabled = false) {
         const div = document.createElement('div');
         div.className = 'control-item';
         div.innerHTML = `<label>${label}</label>`;
 
         const sel = document.createElement('select');
         sel.id = id;
+        sel.disabled = disabled;
+        if (disabled) sel.style.opacity = '0.5';
         options.forEach(opt => {
             const o = document.createElement('option');
             o.value = opt.value;
@@ -579,72 +605,87 @@ class VideoApp {
         this.elements.statusBar.textContent = 'Frame PNG downloaded!';
     }
 
-    async downloadDecodedAsVideo(btn) {
+    async downloadDecodedAsGif(btn) {
         if (!this.hasDecodedData || !this.decoder.data) return;
+        if (typeof GIF === 'undefined') {
+            alert('GIF library loading. Please try again in a moment.');
+            return;
+        }
 
         const originalText = btn.textContent;
         btn.disabled = true;
-        btn.textContent = 'Recording...';
-        this.elements.statusBar.textContent = 'Recording video...';
+        this.elements.statusBar.textContent = 'Generating GIF...';
 
-        // Get video duration from decoder data
-        const duration = this.decoder.data.meta?.duration ||
-            (this.decoder.data.frames[this.decoder.data.frames.length - 1]?.t || 3000);
-
-        // Create a stream from the canvas
-        const stream = this.decoderCanvas.captureStream(30); // 30 fps
-        const chunks = [];
-
-        // Try to use VP9 for better quality, fallback to VP8
-        let mimeType = 'video/webm;codecs=vp9';
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = 'video/webm;codecs=vp8';
-        }
-        if (!MediaRecorder.isTypeSupported(mimeType)) {
-            mimeType = 'video/webm';
-        }
-
-        const recorder = new MediaRecorder(stream, {
-            mimeType: mimeType,
-            videoBitsPerSecond: 5000000 // 5 Mbps
+        const gif = new GIF({
+            workers: 2,
+            quality: 10,
+            width: this.decoderCanvas.width,
+            height: this.decoderCanvas.height,
+            workerScript: 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'
         });
 
-        recorder.ondataavailable = (e) => {
-            if (e.data.size > 0) {
-                chunks.push(e.data);
-            }
-        };
+        const frames = this.decoder.data.frames;
+        this.decoder.pause();
 
-        recorder.onstop = () => {
-            const blob = new Blob(chunks, { type: 'video/webm' });
+        // Temporary canvas for rendering frames for the GIF
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = this.decoderCanvas.width;
+        tempCanvas.height = this.decoderCanvas.height;
+        const tempCtx = tempCanvas.getContext('2d', { alpha: false });
+
+        let reconstructed = null;
+
+        for (let i = 0; i < frames.length; i++) {
+            const frame = frames[i];
+            const nextFrame = frames[i + 1];
+            const delay = nextFrame ? (nextFrame.t - frame.t) : 100;
+
+            // Simple reconstruction logic (matches VideoDecoder)
+            if (frame.type === 'f' || !frame.type) {
+                reconstructed = JSON.parse(JSON.stringify(frame.d));
+            } else if (frame.type === 'd' && reconstructed) {
+                if (frame.cd) {
+                    for (let j = 0; j < frame.cd.length; j += 2) {
+                        reconstructed.colors[frame.cd[j]] = frame.cd[j + 1];
+                    }
+                }
+                if (frame.td) {
+                    const textChars = Array.from(reconstructed.text);
+                    for (let j = 0; j < frame.td.length; j += 2) {
+                        textChars[frame.td[j]] = frame.td[j + 1];
+                    }
+                    reconstructed.text = textChars.join('');
+                }
+            }
+
+            if (reconstructed) {
+                AsciiProcessor.drawFrame(tempCtx, reconstructed);
+                gif.addFrame(tempCtx, { copy: true, delay: delay });
+            }
+
+            if (i % 10 === 0) {
+                btn.textContent = `Frames: ${i}/${frames.length}`;
+            }
+        }
+
+        gif.on('progress', (p) => {
+            btn.textContent = `Rendering: ${Math.round(p * 100)}%`;
+        });
+
+        gif.on('finished', (blob) => {
             const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
-            link.download = `ascii-video-${Date.now()}.webm`;
+            link.download = `ascii-art-${Date.now()}.gif`;
             link.click();
-            URL.revokeObjectURL(url);
 
             btn.disabled = false;
             btn.textContent = originalText;
-            this.elements.statusBar.textContent = 'Video downloaded!';
-        };
+            this.elements.statusBar.textContent = 'GIF downloaded!';
+        });
 
-        // Start recording
-        recorder.start();
-
-        // Ensure playback is running during recording
-        this.decoder.pause();
-        this.decoder.play((frame) => {
-            if (frame) {
-                AsciiProcessor.drawFrame(this.decoderCtx, frame);
-            }
-        }, () => { });
-
-        // Stop after the video duration (plus a small buffer)
-        setTimeout(() => {
-            recorder.stop();
-            this.decoder.pause();
-        }, duration + 500);
+        this.elements.statusBar.textContent = 'Rendering GIF...';
+        gif.render();
     }
 
     async encodeVideo(encodeBtn) {

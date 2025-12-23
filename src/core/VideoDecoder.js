@@ -94,7 +94,7 @@ export class VideoDecoder {
                         this.reconstructedFrame.colors[idx] = val;
                     }
                 }
-                // Patch Text
+                // Patch Text (Legacy)
                 if (frame.td) {
                     const textChars = Array.from(this.reconstructedFrame.text);
                     for (let j = 0; j < frame.td.length; j += 2) {
@@ -103,6 +103,24 @@ export class VideoDecoder {
                         textChars[idx] = val;
                     }
                     this.reconstructedFrame.text = textChars.join('');
+                }
+                // Patch Indices (New Optimized)
+                if (frame.id) {
+                    const textChars = Array.from(this.reconstructedFrame.text);
+                    const charset = this.reconstructedFrame.charset || ' .:-=+*#%@';
+                    for (let j = 0; j < frame.id.length; j += 2) {
+                        const idx = frame.id[j];
+                        const paletteIdx = frame.id[j + 1];
+                        textChars[idx] = charset[paletteIdx] || ' ';
+                    }
+                    this.reconstructedFrame.text = textChars.join('');
+
+                    // Update the frame's internal index tracking if needed
+                    if (this.reconstructedFrame.charIndices) {
+                        for (let j = 0; j < frame.id.length; j += 2) {
+                            this.reconstructedFrame.charIndices[frame.id[j]] = frame.id[j + 1];
+                        }
+                    }
                 }
             }
             this.lastProcessedIndex = i;
