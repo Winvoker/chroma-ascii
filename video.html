@@ -35,7 +35,8 @@
                                 <div class="drop-zone" id="drop-zone">
                                     <span class="icon">📁</span>
                                     <p>Drag & Drop Video or .ascv</p>
-                                    <input type="file" id="file-input" hidden accept="video/*,.ascv,.ascv.gz,.json,.gz">
+                                    <input type="file" id="file-input" hidden
+                                        accept="video/*,.gif,.ascv,.ascv.gz,.json,.gz">
                                 </div>
                                 <video id="source-video" class="preview-media" hidden></video>
                             </div>
@@ -66,6 +67,7 @@
         </main>
     </div>
 
+    <script src="https://cdn.jsdelivr.net/npm/omggif@1.0.10/omggif.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <script type="module" src="./src/app/video-app.js"></script>
 </body>

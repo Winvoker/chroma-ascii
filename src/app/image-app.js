@@ -24,7 +24,8 @@ class ImageApp {
             adjustArea: document.getElementById('adjust-area'),
             exportArea: document.getElementById('export-area'),
             outputStats: document.getElementById('output-stats'),
-            statusBar: document.getElementById('status-bar')
+            statusBar: document.getElementById('status-bar'),
+            estDisplay: document.getElementById('est-display-js')
         };
 
         // Set up canvases
@@ -303,6 +304,7 @@ class ImageApp {
         this.createSlider(adjustSection, 'exposure', 'Exp', 0.1, 5.0, this.processor.options.exposure, 0.1, (v) => { this.processor.options.exposure = v; this.processIfReady(); });
         this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 10.0, this.processor.options.gamma, 0.1, (v) => { this.processor.options.gamma = v; this.processIfReady(); });
         this.createCheckbox(adjustSection, 'inverted', 'Invert', this.processor.options.inverted, (v) => { this.processor.options.inverted = v; this.processIfReady(); });
+        this.createCheckbox(adjustSection, 'autolevel', 'Auto-Level', this.processor.options.autoLevel, (v) => { this.processor.options.autoLevel = v; this.processIfReady(); });
 
         adjustArea.appendChild(adjustSection);
 
@@ -325,12 +327,8 @@ class ImageApp {
         encodeBtn.disabled = !this.hasSource;
         exportSection.appendChild(encodeBtn);
 
-        // Est inside export
-        const estDiv = document.createElement('div');
-        estDiv.id = 'est-display-js';
-        estDiv.className = 'estimation-box';
-        estDiv.innerHTML = 'Est. Size: --';
-        exportSection.appendChild(estDiv);
+        // Estimation box is persistent in the sidebar (defined in image.html)
+        // No need to recreate it here to avoid duplicate IDs.
 
         exportArea.appendChild(exportSection);
         this.updateEstimation();

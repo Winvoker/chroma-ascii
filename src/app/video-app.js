@@ -26,7 +26,8 @@ class VideoApp {
             adjustArea: document.getElementById('adjust-area'),
             exportArea: document.getElementById('export-area'),
             outputStats: document.getElementById('output-stats'),
-            statusBar: document.getElementById('status-bar')
+            statusBar: document.getElementById('status-bar'),
+            estDisplay: document.getElementById('est-display-js')
         };
 
         // Set up canvases
@@ -104,6 +105,7 @@ class VideoApp {
 
         const isAscii = file.name.endsWith('.ascv') || file.name.endsWith('.gz') ||
             file.name.endsWith('.json') || file.type === 'application/json';
+        const isGif = file.name.toLowerCase().endsWith('.gif') || file.type === 'image/gif';
         const isVideo = file.type.startsWith('video/') ||
             ['.mp4', '.webm', '.ogg', '.mov'].some(ext =>
                 file.name.toLowerCase().endsWith(ext));
@@ -149,11 +151,15 @@ class VideoApp {
             } else {
                 loadData(file);
             }
+        } else if (isGif) {
+            // Handle GIF files specially
+            this.loadGif(file, url);
         } else if (isVideo) {
             this.switchMode('encoder');
             dropZone.style.display = 'none';
             sourceVideo.src = url;
             sourceVideo.muted = true;
+            sourceVideo.loop = true;
             sourceVideo.hidden = false;
 
             sourceVideo.onloadedmetadata = () => {
@@ -172,6 +178,186 @@ class VideoApp {
             };
         } else {
             alert('Please use a video file or .ascv file');
+        }
+    }
+
+    async loadGif(file, url) {
+        const { dropZone, sourceVideo } = this.elements;
+
+        // Check if the omggif library is loaded
+        if (typeof GifReader === 'undefined') {
+            alert('GIF parsing library not loaded. Please refresh the page and try again.');
+            console.error('omggif library not found. Check if the script is loaded correctly.');
+            dropZone.style.display = 'flex';
+            return;
+        }
+
+        this.switchMode('encoder');
+        dropZone.style.display = 'none';
+        this.elements.statusBar.textContent = 'Parsing GIF...';
+
+        try {
+            // Read GIF file
+            const arrayBuffer = await file.arrayBuffer();
+            const intArray = new Uint8Array(arrayBuffer);
+            const reader = new GifReader(intArray);
+
+            const frameCount = reader.numFrames();
+            if (frameCount === 0) {
+                throw new Error('No frames found in GIF');
+            }
+
+            const width = reader.width;
+            const height = reader.height;
+
+            // Create a canvas to render GIF frames
+            const gifCanvas = document.createElement('canvas');
+            gifCanvas.width = width;
+            gifCanvas.height = height;
+            const gifCtx = gifCanvas.getContext('2d');
+
+            // Extract all frames with proper composition
+            const frames = [];
+
+            // Create two buffers: current composite and previous frame backup
+            let currentComposite = new Uint8ClampedArray(width * height * 4);
+            let previousFrame = new Uint8ClampedArray(width * height * 4);
+
+            // Initialize with black background
+            for (let i = 0; i < currentComposite.length; i += 4) {
+                currentComposite[i] = 0;
+                currentComposite[i + 1] = 0;
+                currentComposite[i + 2] = 0;
+                currentComposite[i + 3] = 255;
+            }
+
+            for (let i = 0; i < frameCount; i++) {
+                const frameInfo = reader.frameInfo(i);
+
+                // Save previous frame before modifying (for disposal method 3)
+                previousFrame.set(currentComposite);
+
+                // Create a temp buffer for this frame's pixels
+                const framePixels = new Uint8ClampedArray(width * height * 4);
+                reader.decodeAndBlitFrameRGBA(i, framePixels);
+
+                // Composite the new frame onto current, respecting transparency
+                for (let j = 0; j < framePixels.length; j += 4) {
+                    const alpha = framePixels[j + 3];
+                    if (alpha > 0) {
+                        // Opaque or semi-transparent pixel - replace
+                        currentComposite[j] = framePixels[j];
+                        currentComposite[j + 1] = framePixels[j + 1];
+                        currentComposite[j + 2] = framePixels[j + 2];
+                        currentComposite[j + 3] = framePixels[j + 3];
+                    }
+                    // If alpha === 0, keep existing pixel (transparency)
+                }
+
+                // Capture current state as this frame's image
+                const frameImageData = gifCtx.createImageData(width, height);
+                frameImageData.data.set(currentComposite);
+
+                frames.push({
+                    imageData: frameImageData,
+                    delay: frameInfo.delay * 10 || 100,
+                    disposal: frameInfo.disposal
+                });
+
+                // Handle disposal for NEXT frame
+                const disposal = frameInfo.disposal;
+
+                if (disposal === 2) {
+                    // Restore to background (clear to black)
+                    for (let j = 0; j < currentComposite.length; j += 4) {
+                        currentComposite[j] = 0;
+                        currentComposite[j + 1] = 0;
+                        currentComposite[j + 2] = 0;
+                        currentComposite[j + 3] = 255;
+                    }
+                } else if (disposal === 3) {
+                    // Restore to previous frame
+                    currentComposite.set(previousFrame);
+                }
+                // Disposal 0 or 1: do nothing (keep current composite for next frame)
+            }
+
+            // Store GIF data for later use
+            this.gifData = { frames, canvas: gifCanvas, ctx: gifCtx, currentFrameIndex: 0 };
+            this.isGifSource = true;
+
+            // Calculate total duration
+            const totalDuration = frames.reduce((sum, frame) => sum + frame.delay, 0) / 1000;
+
+            // Render first frame
+            this.renderGifFrame(0);
+
+            // Set the canvas as the processor source
+            this.processor.setSource(gifCanvas);
+            this.hasSource = true;
+
+            // Start GIF animation loop
+            this.startGifPlayback();
+
+            this.elements.statusBar.textContent = `GIF loaded: ${frames.length} frames (${totalDuration.toFixed(1)}s)`;
+            this.renderControls();
+
+        } catch (error) {
+            console.error('Error loading GIF:', error);
+            alert('Error loading GIF: ' + error.message);
+            dropZone.style.display = 'flex';
+            this.hasSource = false;
+            this.isGifSource = false;
+            this.renderControls();
+        }
+    }
+
+    renderGifFrame(frameIndex) {
+        if (!this.gifData || !this.gifData.frames) return;
+
+        const { frames, ctx } = this.gifData;
+        const frame = frames[frameIndex];
+
+        // Just display the pre-composed frame (already includes all necessary composition)
+        ctx.putImageData(frame.imageData, 0, 0);
+
+        this.gifData.currentFrameIndex = frameIndex;
+    }
+
+    startGifPlayback() {
+        if (!this.gifData || this.gifPlaybackInterval) return;
+
+        let frameIndex = 0;
+        const playFrame = () => {
+            if (!this.gifData || !this.hasSource) {
+                if (this.gifPlaybackInterval) {
+                    clearInterval(this.gifPlaybackInterval);
+                    this.gifPlaybackInterval = null;
+                }
+                return;
+            }
+
+            const { frames } = this.gifData;
+            this.renderGifFrame(frameIndex);
+
+            frameIndex = (frameIndex + 1) % frames.length;
+
+            // Schedule next frame based on current frame's delay
+            const delay = frames[frameIndex].delay || 100;
+
+            if (this.gifPlaybackInterval) {
+                clearTimeout(this.gifPlaybackInterval);
+            }
+            this.gifPlaybackInterval = setTimeout(playFrame, delay);
+        };
+
+        playFrame();
+    }
+
+    stopGifPlayback() {
+        if (this.gifPlaybackInterval) {
+            clearTimeout(this.gifPlaybackInterval);
+            this.gifPlaybackInterval = null;
         }
     }
 
@@ -194,6 +380,7 @@ class VideoApp {
     }
 
     updateLoop(timestamp) {
+        // Handle regular video sources
         if (this.currentMode === 'encoder' && this.hasSource &&
             this.processor.isVideo && !this.encoder.isEncoding &&
             !this.elements.sourceVideo.paused) {
@@ -212,6 +399,24 @@ class VideoApp {
                 }
             }
         }
+
+        // Handle GIF sources
+        if (this.currentMode === 'encoder' && this.hasSource &&
+            this.isGifSource && !this.encoder.isEncoding) {
+
+            const frameInterval = 1000 / this.targetFps;
+            if (timestamp - this.lastFrameTime >= frameInterval) {
+                this.lastFrameTime = timestamp;
+                this.processor.process();
+                this.updateEncoderStats();
+
+                if (!this.lastEstimationTime || timestamp - this.lastEstimationTime > 1000) {
+                    this.lastEstimationTime = timestamp;
+                    this.updateEstimation();
+                }
+            }
+        }
+
         requestAnimationFrame(this.updateLoop);
     }
 
@@ -363,6 +568,7 @@ class VideoApp {
         this.createSlider(adjustSection, 'exposure', 'Exp', 0.1, 5.0, this.processor.options.exposure, 0.1, (v) => { this.processor.options.exposure = v; this.processIfReady(); });
         this.createSlider(adjustSection, 'gamma', 'Gamma', 0.1, 10.0, this.processor.options.gamma, 0.1, (v) => { this.processor.options.gamma = v; this.processIfReady(); });
         this.createCheckbox(adjustSection, 'inverted', 'Invert', this.processor.options.inverted, (v) => { this.processor.options.inverted = v; this.processIfReady(); });
+        this.createCheckbox(adjustSection, 'autolevel', 'Auto-Level', this.processor.options.autoLevel, (v) => { this.processor.options.autoLevel = v; this.processIfReady(); });
 
         adjustArea.appendChild(adjustSection);
 
@@ -389,12 +595,8 @@ class VideoApp {
         encodeBtn.disabled = !this.hasSource;
         exportSection.appendChild(encodeBtn);
 
-        // Est inside export
-        const estDiv = document.createElement('div');
-        estDiv.id = 'est-display-js';
-        estDiv.className = 'estimation-box';
-        estDiv.innerHTML = 'Est. Size: --';
-        exportSection.appendChild(estDiv);
+        // Estimation box is persistent in the sidebar (defined in video.html)
+        // No need to recreate it here to avoid duplicate IDs.
 
         exportArea.appendChild(exportSection);
 
@@ -444,8 +646,19 @@ class VideoApp {
         if (data) {
             const frameSize = JSON.stringify(data).length;
             const fps = this.targetFps || 30;
-            const duration = this.elements.sourceVideo?.duration || 1;
-            const frameCount = Math.floor(fps * duration);
+
+            // Get duration and frame count based on source type
+            let duration, frameCount;
+            if (this.isGifSource && this.gifData) {
+                // For GIFs, use actual frame count
+                frameCount = this.gifData.frames.length;
+                duration = this.gifData.frames.reduce((sum, frame) => sum + (frame.delay || 100), 0) / 1000;
+            } else {
+                // For videos, calculate from duration and FPS
+                duration = this.elements.sourceVideo?.duration || 1;
+                frameCount = Math.floor(fps * duration);
+            }
+
             rawTotal = frameSize * frameCount;
 
             // Delta is usually 40% of Raw, and GZIP 15% of Delta for video
@@ -644,6 +857,8 @@ class VideoApp {
             if (frame.type === 'f' || !frame.type) {
                 reconstructed = JSON.parse(JSON.stringify(frame.d));
             } else if (frame.type === 'd' && reconstructed) {
+                const width = reconstructed.width;
+
                 if (frame.cd) {
                     for (let j = 0; j < frame.cd.length; j += 2) {
                         reconstructed.colors[frame.cd[j]] = frame.cd[j + 1];
@@ -652,9 +867,40 @@ class VideoApp {
                 if (frame.td) {
                     const textChars = Array.from(reconstructed.text);
                     for (let j = 0; j < frame.td.length; j += 2) {
-                        textChars[frame.td[j]] = frame.td[j + 1];
+                        const dataIdx = frame.td[j];
+                        const char = frame.td[j + 1];
+
+                        // Convert data index to text index (accounting for newlines)
+                        const row = Math.floor(dataIdx / width);
+                        const col = dataIdx % width;
+                        const textIdx = row * (width + 1) + col;
+
+                        textChars[textIdx] = char;
                     }
                     reconstructed.text = textChars.join('');
+                }
+                if (frame.id) {
+                    const textChars = Array.from(reconstructed.text);
+                    const charset = reconstructed.charset || ' .:-=+*#%@';
+
+                    for (let j = 0; j < frame.id.length; j += 2) {
+                        const dataIdx = frame.id[j];
+                        const paletteIdx = frame.id[j + 1];
+
+                        // Convert data index to text index (accounting for newlines)
+                        const row = Math.floor(dataIdx / width);
+                        const col = dataIdx % width;
+                        const textIdx = row * (width + 1) + col;
+
+                        textChars[textIdx] = charset[paletteIdx] || ' ';
+                    }
+                    reconstructed.text = textChars.join('');
+
+                    if (reconstructed.charIndices) {
+                        for (let j = 0; j < frame.id.length; j += 2) {
+                            reconstructed.charIndices[frame.id[j]] = frame.id[j + 1];
+                        }
+                    }
                 }
             }
 
@@ -690,6 +936,11 @@ class VideoApp {
 
     async encodeVideo(encodeBtn) {
         if (!this.hasSource) return;
+
+        // Check if source is a GIF
+        if (this.isGifSource) {
+            return this.encodeGif(encodeBtn);
+        }
 
         const video = this.elements.sourceVideo;
         const fps = this.targetFps;
@@ -749,12 +1000,73 @@ class VideoApp {
         video.currentTime = 0;
     }
 
+    async encodeGif(encodeBtn) {
+        if (!this.gifData) return;
+
+        encodeBtn.disabled = true;
+        encodeBtn.textContent = 'Encoding...';
+        this.stopGifPlayback();
+
+        const { frames } = this.gifData;
+        const frameCount = frames.length;
+
+        this.encoder.start();
+        this.elements.statusBar.textContent = 'Encoding GIF frames...';
+
+        // Process each frame
+        for (let i = 0; i < frameCount; i++) {
+            // Render the frame
+            this.renderGifFrame(i);
+
+            // Process it
+            this.processor.process();
+
+            // Calculate timestamp based on accumulated delays
+            let timestamp = 0;
+            for (let j = 0; j < i; j++) {
+                timestamp += frames[j].delay || 100;
+            }
+
+            // Add to encoder
+            this.encoder.addFrame(this.processor.currentFrameData, timestamp);
+
+            // Update progress
+            const pct = Math.round(((i + 1) / frameCount) * 100);
+            encodeBtn.textContent = `Encoding ${pct}%`;
+            this.elements.statusBar.textContent = `Encoding frame ${i + 1}/${frameCount}`;
+
+            // Allow UI to update
+            await new Promise(resolve => setTimeout(resolve, 0));
+        }
+
+        // Save the encoded data
+        this.elements.statusBar.textContent = 'Compressing...';
+        const blob = await this.encoder.stopAndSave();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ascii-gif-${Date.now()}.ascv.gz`;
+        a.click();
+
+        encodeBtn.disabled = false;
+        encodeBtn.textContent = '💾 Save as .ascv';
+        this.elements.statusBar.textContent = 'Done!';
+
+        // Restart GIF playback
+        this.startGifPlayback();
+    }
+
     reset() {
         this.processor.source = null;
         this.hasSource = false;
         this.hasDecodedData = false;
         this.decoder.pause();
         this.decoder.data = null;
+
+        // Clean up GIF data
+        this.stopGifPlayback();
+        this.isGifSource = false;
+        this.gifData = null;
 
         this.elements.dropZone.style.display = 'flex';
         this.elements.sourceVideo.pause();

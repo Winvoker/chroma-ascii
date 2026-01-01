@@ -24,7 +24,8 @@ export class AsciiProcessor {
             colorDepth: 8, // New: 4, 8, 12, or 24
             binaryThreshold: 128,
             binaryLight: '1',
-            binaryDark: '0'
+            binaryDark: '0',
+            autoLevel: false
         };
 
         // Current Frame Data
@@ -89,9 +90,59 @@ export class AsciiProcessor {
         const imageData = this.ctx.getImageData(0, 0, processWidth, processHeight);
         const data = imageData.data;
 
-        // 2. Process Pixels -> Chars & Colors
-        const { charSize, charset, colorMode, gamma, contrast, inverted, binaryThreshold, binaryLight, binaryDark } = this.options;
+        const { charSize, charset, colorMode, gamma, contrast, inverted, binaryThreshold, binaryLight, binaryDark, autoLevel, exposure, brightness } = this.options;
         const charsetLen = charset.length;
+
+        // 1.5. Pre-process adjusted image and build histogram
+        // Using a LUT for manual adjustments (Gamma, Contrast, Brightness, Exposure)
+        const lut = new Uint8ClampedArray(256);
+        for (let i = 0; i < 256; i++) {
+            lut[i] = this.applyGammaContrast(i, gamma, contrast, brightness, exposure);
+        }
+
+        const adjustedData = new Uint8ClampedArray(data.length);
+        const histogram = new Uint32Array(256);
+        const adjLuminanceMap = new Float32Array(processWidth * processHeight);
+        const totalPixels = processWidth * processHeight;
+
+        for (let i = 0; i < data.length; i += 4) {
+            const rAdj = lut[data[i]];
+            const gAdj = lut[data[i + 1]];
+            const bAdj = lut[data[i + 2]];
+
+            adjustedData[i] = rAdj;
+            adjustedData[i + 1] = gAdj;
+            adjustedData[i + 2] = bAdj;
+            adjustedData[i + 3] = data[i + 3];
+
+            // Calculate adjusted luminance (with inversion)
+            let lum = 0.2126 * rAdj + 0.7152 * gAdj + 0.0722 * bAdj;
+            if (inverted) lum = 255 - lum;
+
+            const lumClamped = Math.floor(Math.max(0, Math.min(255, lum)));
+            adjLuminanceMap[i / 4] = lumClamped;
+            histogram[lumClamped]++;
+        }
+
+        // Compute CDF for Histogram Equalization
+        const cdf = new Float32Array(256);
+        let accumulated = 0;
+        let cdfMin = 0;
+        let foundMin = false;
+        for (let i = 0; i < 256; i++) {
+            accumulated += histogram[i];
+            cdf[i] = accumulated;
+            if (!foundMin && histogram[i] > 0) {
+                cdfMin = accumulated;
+                foundMin = true;
+            }
+        }
+
+        const cdfRange = totalPixels - cdfMin || 1;
+        const normalizedCdf = new Float32Array(256);
+        for (let i = 0; i < 256; i++) {
+            normalizedCdf[i] = ((cdf[i] - cdfMin) / cdfRange) * 255;
+        }
 
         let text = '';
         // We use a flat text string for storage efficiency (if lines needed, we can split later or store width)
@@ -116,17 +167,23 @@ export class AsciiProcessor {
                 let charToDraw = ' ';
                 let r = 0, g = 0, b = 0;
                 let colorPacked = -1; // Default
+                let idx = 0; // Character index for palette
 
                 // --- Logic extraction ---
                 if (mode === 'block') {
                     const offsetT = (y * processWidth + x) * 4;
                     const offsetB = (Math.min(y + 1, processHeight - 1) * processWidth + x) * 4;
 
-                    const rT = data[offsetT]; const gT = data[offsetT + 1]; const bT = data[offsetT + 2];
-                    const rB = data[offsetB]; const gB = data[offsetB + 1]; const bB = data[offsetB + 2];
+                    const rTAdj = adjustedData[offsetT]; const gTAdj = adjustedData[offsetT + 1]; const bTAdj = adjustedData[offsetT + 2];
+                    const rBAdj = adjustedData[offsetB]; const gBAdj = adjustedData[offsetB + 1]; const bBAdj = adjustedData[offsetB + 2];
 
-                    let brT = this.getBrightness(rT, gT, bT, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
-                    let brB = this.getBrightness(rB, gB, bB, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
+                    let brT = adjLuminanceMap[y * processWidth + x];
+                    let brB = adjLuminanceMap[Math.min(y + 1, processHeight - 1) * processWidth + x];
+
+                    if (autoLevel) {
+                        brT = normalizedCdf[Math.floor(brT)];
+                        brB = normalizedCdf[Math.floor(brB)];
+                    }
 
                     const tOn = brT > 127.5;
                     const bOn = brB > 127.5;
@@ -139,31 +196,29 @@ export class AsciiProcessor {
                     if (colorMode === 'color') {
                         const depth = this.options.colorDepth;
                         if (depth === 4) {
-                            const r1 = (rT >> 7); const g2 = (gT >> 6); const b1 = (bT >> 7);
+                            const r1 = (rTAdj >> 7); const g2 = (gTAdj >> 6); const b1 = (bTAdj >> 7);
                             colorPacked = (r1 << 3) | (g2 << 1) | b1;
                         } else if (depth === 8) {
-                            const r3 = (rT >> 5); const g3 = (gT >> 5); const b2 = (bT >> 6);
+                            const r3 = (rTAdj >> 5); const g3 = (gTAdj >> 5); const b2 = (bTAdj >> 6);
                             colorPacked = (r3 << 5) | (g3 << 2) | b2;
                         } else if (depth === 12) {
-                            const r4 = (rT >> 4); const g4 = (gT >> 4); const b4 = (bT >> 4);
+                            const r4 = (rTAdj >> 4); const g4 = (gTAdj >> 4); const b4 = (bTAdj >> 4);
                             colorPacked = (r4 << 8) | (g4 << 4) | b4;
                         } else {
-                            colorPacked = (rT << 16) | (gT << 8) | bT;
+                            colorPacked = (rTAdj << 16) | (gTAdj << 8) | bTAdj;
                         }
                     }
 
                     // Special indices for block mode
-                    let idx = tOn + (bOn << 1);
-                    charIndices.push(idx);
+                    idx = tOn + (bOn << 1);
 
                     // We need a custom charset for block mode to map indices 0,1,2,3
                     this.currentBlockCharset = ' ▀▄█';
                 } else {
                     const offset = (y * processWidth + x) * 4;
-                    r = data[offset]; g = data[offset + 1]; b = data[offset + 2];
-                    let brightness = this.getBrightness(r, g, b, gamma, contrast, inverted, this.options.brightness, this.options.exposure);
+                    r = adjustedData[offset]; g = adjustedData[offset + 1]; b = adjustedData[offset + 2];
+                    let brightness = adjLuminanceMap[y * processWidth + x];
 
-                    let idx = 0;
                     if (mode === 'binary') {
                         const bayer = getBayerValue(x, y);
                         const dithered = brightness + ((bayer / 16) - 0.5) * 32;
@@ -174,11 +229,16 @@ export class AsciiProcessor {
                     } else if (mode === 'dither') {
                         const bayer = getBayerValue(x, y);
                         const t = (bayer + 0.5) / 16.0;
-                        idx = Math.floor(((brightness / 255) + (t - 0.5) / charsetLen) * (charsetLen - 1));
+                        if (autoLevel) brightness = normalizedCdf[Math.floor(brightness)];
+                        idx = Math.floor(((brightness / 256) + (t - 0.5) / charsetLen) * charsetLen);
                         idx = Math.max(0, Math.min(idx, charsetLen - 1));
                         charToDraw = charset[idx];
                     } else { // Grayscale
-                        idx = Math.floor((brightness / 255) * (charsetLen - 1));
+                        if (autoLevel) {
+                            brightness = normalizedCdf[Math.floor(brightness)];
+                        }
+
+                        idx = Math.floor((brightness / 256) * charsetLen);
                         idx = Math.max(0, Math.min(idx, charsetLen - 1));
                         charToDraw = charset[idx];
                     }
@@ -198,10 +258,9 @@ export class AsciiProcessor {
                             colorPacked = (r << 16) | (g << 8) | b;
                         }
                     }
-
-                    charIndices.push(idx);
                 }
 
+                charIndices.push(idx);
                 text += charToDraw;
                 if (colors) colors[charIndex++] = colorPacked;
             }
@@ -223,8 +282,7 @@ export class AsciiProcessor {
             colorDepth: this.options.colorDepth,
             colorMode: this.options.colorMode,
             charset: finalCharset,
-            resolution: this.options.resolution,
-            height: this.options.resolution * (this.processCanvas.height / this.processCanvas.width)
+            resolution: this.options.resolution
         };
 
         // 3. Render directly if we have a context
@@ -303,7 +361,7 @@ export class AsciiProcessor {
                 const hue = ((x / res) * 360 + (y * 2)) % 360;
                 ctx.fillStyle = `hsl(${hue}, 90%, 65%)`;
             } else if (col === -1) {
-                ctx.fillStyle = '#00ff88';
+                ctx.fillStyle = '#ffffff';
             } else {
                 const depth = frameData.colorDepth || 12;
                 let r, g, b;

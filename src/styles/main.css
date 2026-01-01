@@ -295,10 +295,9 @@ input, select, textarea, .ascii-container {
     height: 100%;
     overflow-y: auto;
     background: rgba(15, 15, 15, 0.95);
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: min-content min-content min-content;
-    align-content: start;
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
     gap: 15px;
     padding: 15px;
     position: relative;
@@ -310,49 +309,22 @@ input, select, textarea, .ascii-container {
     position: absolute;
     left: 50%;
     top: 0;
-    bottom: 0;
+    bottom: 15px;
     width: 1px;
     background: var(--panel-border);
     pointer-events: none;
 }
 
 .sidebar-column {
-    display: contents;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
 }
 
 #tabs-area, #export-area, #clickable-source, #est-display-js, #settings-area, #adjust-area {
-    align-self: start;
+    width: 100%;
 }
-
-.compact-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    margin-bottom: 5px;
-}
-
-.compact-group > :first-child {
-    margin-bottom: 0 !important;
-}
-
-.compact-group .tab-container {
-    margin-bottom: 0;
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
-}
-
-.compact-group .source-panel {
-    border-top: none;
-    border-top-left-radius: 0;
-    border-top-right-radius: 0;
-}
-
-#tabs-area { grid-area: 1 / 1 / 2 / 2; }
-#export-area { grid-area: 1 / 2 / 2 / 3; }
-#clickable-source { grid-area: 2 / 1 / 3 / 2; }
-#est-display-js { grid-area: 2 / 2 / 3 / 3; }
-#settings-area { grid-area: 3 / 1 / 4 / 2; }
-#adjust-area { grid-area: 3 / 2 / 4 / 3; }
 
 .estimation-box table {
     width: 100%;
@@ -420,7 +392,6 @@ input, select, textarea, .ascii-container {
     font-family: var(--font-mono);
     font-size: 11px;
     color: var(--accent-primary);
-    margin-top: 10px;
 }
 
 .panel-header {

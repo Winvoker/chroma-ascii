@@ -97,10 +97,18 @@ export class VideoDecoder {
                 // Patch Text (Legacy)
                 if (frame.td) {
                     const textChars = Array.from(this.reconstructedFrame.text);
+                    const width = this.reconstructedFrame.width;
+
                     for (let j = 0; j < frame.td.length; j += 2) {
-                        const idx = frame.td[j];
-                        const val = frame.td[j + 1];
-                        textChars[idx] = val;
+                        const dataIdx = frame.td[j];
+                        const char = frame.td[j + 1];
+
+                        // Convert data index to text index (accounting for newlines)
+                        const row = Math.floor(dataIdx / width);
+                        const col = dataIdx % width;
+                        const textIdx = row * (width + 1) + col;
+
+                        textChars[textIdx] = char;
                     }
                     this.reconstructedFrame.text = textChars.join('');
                 }
@@ -108,10 +116,20 @@ export class VideoDecoder {
                 if (frame.id) {
                     const textChars = Array.from(this.reconstructedFrame.text);
                     const charset = this.reconstructedFrame.charset || ' .:-=+*#%@';
+                    const width = this.reconstructedFrame.width;
+
+                    // Build a mapping from data index (excluding newlines) to text index (including newlines)
+                    // Each row has 'width' characters plus 1 newline
                     for (let j = 0; j < frame.id.length; j += 2) {
-                        const idx = frame.id[j];
+                        const dataIdx = frame.id[j]; // Index in the data array (no newlines)
                         const paletteIdx = frame.id[j + 1];
-                        textChars[idx] = charset[paletteIdx] || ' ';
+
+                        // Convert data index to text index (accounting for newlines)
+                        const row = Math.floor(dataIdx / width);
+                        const col = dataIdx % width;
+                        const textIdx = row * (width + 1) + col; // +1 for newline per row
+
+                        textChars[textIdx] = charset[paletteIdx] || ' ';
                     }
                     this.reconstructedFrame.text = textChars.join('');
 
