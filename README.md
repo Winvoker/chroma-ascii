@@ -48,7 +48,6 @@ Standard media formats (MP4, PNG, JPG) are designed to compress *pixels*. **Chro
 | **📄 Raw JSON** | Plain Metadata | **~200 KB** | 100% (The Reference) |
 | ** GZIP** | Standard Compression | **~80 KB** | 40% (General Purpose) |
 | **📟 .ASCV.GZ** | **Custom Protocol** | **~12 KB** | **6% (Hyper-Efficiency)** |
-| **🌑 MONO** | **Binary Encoding** | **~2 KB** | **1% (Ultimate Optimization)** |
 
 ### 🚀 Why `.ascv` is the Superior Choice
 
