@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChromaASCII - Bulk Processor</title>
+    <style>
+        :root {
+            --bg-primary: #0a0a0a;
+            --bg-secondary: #141414;
+            --bg-tertiary: #1e1e1e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #888;
+            --accent-primary: #00d4aa;
+            --accent-secondary: #ff6b35;
+            --border-color: #2a2a2a;
+            --spacing-xs: 4px;
+            --spacing-sm: 8px;
+            --spacing-md: 16px;
+            --spacing-lg: 24px;
+            --font-mono: 'Consolas', 'Monaco', 'Courier New', monospace;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: var(--font-mono);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            padding: var(--spacing-lg);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-bottom: var(--spacing-lg);
+            color: var(--accent-primary);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .drop-zone {
+            border: 2px dashed var(--border-color);
+            border-radius: 8px;
+            padding: 60px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: var(--bg-secondary);
+        }
+
+        .drop-zone:hover,
+        .drop-zone.dragging {
+            border-color: var(--accent-primary);
+            background: var(--bg-tertiary);
+        }
+
+        .drop-zone p {
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .drop-zone .hint {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            opacity: 0.6;
+        }
+
+        #folder-input {
+            display: none;
+        }
+
+        .controls {
+            margin-top: var(--spacing-lg);
+            display: flex;
+            gap: var(--spacing-md);
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .control-group {
+            background: var(--bg-secondary);
+            padding: var(--spacing-md);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+        }
+
+        .control-group h3 {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: var(--spacing-sm);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        button {
+            font-family: var(--font-mono);
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+        }
+
+        button.primary {
+            background: var(--accent-primary);
+            color: var(--bg-primary);
+        }
+
+        button.primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button.primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        button.secondary:hover {
+            border-color: var(--accent-primary);
+        }
+
+        .status-bar {
+            margin-top: var(--spacing-lg);
+            padding: var(--spacing-md);
+            background: var(--bg-secondary);
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            font-size: 0.85rem;
+        }
+
+        .progress {
+            margin-top: var(--spacing-md);
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: var(--accent-primary);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .log {
+            margin-top: var(--spacing-md);
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
+            padding: var(--spacing-sm);
+            border-radius: 4px;
+        }
+
+        .log-item {
+            padding: 2px 0;
+        }
+
+        .log-item.success {
+            color: var(--accent-primary);
+        }
+
+        .log-item.error {
+            color: var(--accent-secondary);
+        }
+
+        .stats {
+            margin-top: var(--spacing-md);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: var(--spacing-sm);
+        }
+
+        .stat-item {
+            background: var(--bg-secondary);
+            padding: var(--spacing-sm);
+            border-radius: 4px;
+            text-align: center;
+        }
+
+        .stat-item .value {
+            font-size: 1.2rem;
+            color: var(--accent-primary);
+        }
+
+        .stat-item .label {
+            font-size: 0.7rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+        }
+
+        label {
+            display: block;
+            margin-bottom: var(--spacing-xs);
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        input[type="number"],
+        select {
+            font-family: var(--font-mono);
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        input[type="number"]:focus,
+        select:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+
+        .options-row {
+            display: flex;
+            gap: var(--spacing-md);
+            align-items: flex-end;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>📂 ChromaASCII - Bulk Processor</h1>
+
+        <div class="drop-zone" id="drop-zone">
+            <p>📁 Click to select a folder</p>
+            <p class="hint">Contains images (.jpg, .png, .webp, .gif) and videos (.mp4, .webm, .mov)</p>
+        </div>
+        <input type="file" id="folder-input" webkitdirectory multiple>
+
+        <div class="controls">
+            <div class="control-group">
+                <h3>Settings</h3>
+                <div class="options-row">
+                    <div>
+                        <label>Resolution</label>
+                        <input type="number" id="resolution" value="100" min="20" max="500">
+                    </div>
+                    <div>
+                        <label>Char Size</label>
+                        <input type="number" id="charSize" value="10" min="4" max="32">
+                    </div>
+                    <div>
+                        <label>Color Depth</label>
+                        <select id="colorDepth">
+                            <option value="4">4-bit</option>
+                            <option value="8" selected>8-bit</option>
+                            <option value="12">12-bit</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <button id="process-btn" class="primary" disabled>🚀 Process Images</button>
+            <button id="download-btn" class="secondary" disabled>📥 Download ZIP</button>
+        </div>
+
+        <div class="status-bar" id="status-bar">
+            Ready. Select a folder to begin.
+        </div>
+
+        <div class="progress">
+            <div class="progress-bar" id="progress-bar"></div>
+        </div>
+
+        <div class="stats" id="stats" style="display: none;">
+            <div class="stat-item">
+                <div class="value" id="stat-images">0</div>
+                <div class="label">Images</div>
+            </div>
+            <div class="stat-item">
+                <div class="value" id="stat-videos">0</div>
+                <div class="label">Videos</div>
+            </div>
+            <div class="stat-item">
+                <div class="value" id="stat-processed">0</div>
+                <div class="label">Processed</div>
+            </div>
+            <div class="stat-item">
+                <div class="value" id="stat-failed">0</div>
+                <div class="label">Failed</div>
+            </div>
+        </div>
+
+        <div class="log" id="log"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script type="module" src="src/app/bulk-app.js"></script>
+</body>
+
+</html>

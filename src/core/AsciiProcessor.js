@@ -84,6 +84,8 @@ export class AsciiProcessor {
         if (this.processCanvas.width !== processWidth || this.processCanvas.height !== processHeight) {
             this.processCanvas.width = processWidth;
             this.processCanvas.height = processHeight;
+        } else {
+            this.ctx.clearRect(0, 0, processWidth, processHeight);
         }
 
         this.ctx.drawImage(this.source, 0, 0, processWidth, processHeight);
@@ -321,8 +323,20 @@ export class AsciiProcessor {
         const { text, colors, width, height, charSize = 10 } = frameData;
         const canvas = ctx.canvas;
 
-        // Calc dimensions
-        const charW = charSize * 0.6;
+        const font = `${charSize}px "JetBrains Mono", monospace`;
+        ctx.font = font;
+
+        // Measure widest glyph used in this frame to avoid overlap with variable-width symbols.
+        const fallbackW = charSize * 0.6;
+        let measuredW = ctx.measureText('M').width || fallbackW;
+        const sample = Array.from(frameData.charset || '').filter((c) => c !== '\n');
+        if (sample.length > 0) {
+            for (const ch of sample) {
+                const w = ctx.measureText(ch).width;
+                if (w > measuredW) measuredW = w;
+            }
+        }
+        const charW = measuredW || fallbackW;
         const charH = charSize;
 
         const targetW = Math.ceil(width * charW);
@@ -336,7 +350,8 @@ export class AsciiProcessor {
         ctx.fillStyle = '#000000';
         ctx.fillRect(0, 0, targetW, targetH);
 
-        ctx.font = `${charSize}px "JetBrains Mono", monospace`;
+        ctx.font = font;
+        ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
 
 
@@ -386,11 +401,22 @@ export class AsciiProcessor {
                 ctx.fillStyle = `rgb(${r},${g},${b})`;
             }
 
-            // Draw
-            // Correction for block mode spacing?
-            // The processor sends 'height' which handles the block compression.
-            // We just draw grid.
-            ctx.fillText(char, x * charW, y * charH);
+            if (frameData.mode === 'block') {
+                const px = x * charW;
+                const py = y * charH;
+                const halfH = Math.ceil(charH / 2);
+
+                if (char === '█') {
+                    ctx.fillRect(px, py, charW, charH);
+                } else if (char === '▀') {
+                    ctx.fillRect(px, py, charW, halfH);
+                } else if (char === '▄') {
+                    ctx.fillRect(px, py + (charH - halfH), charW, halfH);
+                }
+            } else {
+                // Draw text in non-block modes.
+                ctx.fillText(char, x * charW, y * charH);
+            }
             x++;
         }
     }

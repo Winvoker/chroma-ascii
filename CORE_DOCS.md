@@ -107,3 +107,128 @@ The `.ascv` format is a Gzipped JSON structure. You can un-gzip it to see the ra
 - **Color Packing:** Colors are stored as `Int32Array` for better memory efficiency and faster compression.
 - **Block Mode:** The `block` mode uses special characters (▀, ▄, █) to double the vertical resolution.
 - **Static Drawing:** `AsciiProcessor.drawFrame` is a "pure" function. It doesn't require an instance and can be used to render frames on any canvas, even on multiple canvases simultaneously.
+
+---
+
+## ⚡ Browser library quickstart
+
+This section focuses on using the core engine as a **browser library**, without relying on the built-in image/video UIs.
+
+### 1. Display a pre-generated ASCII frame
+
+Assume you already have a `frameData` object that matches what `AsciiProcessor.process()` produces (for example, loaded from JSON or decoded from an `.ascv` file).
+
+```javascript
+import { AsciiProcessor } from './src/core/AsciiProcessor.js';
+
+// 1. Get or load frameData (e.g. from fetch() or file input)
+// const frameData = JSON.parse(textFromServerOrFile);
+
+// 2. Prepare a canvas
+const canvas = document.getElementById('asciiCanvas');
+const ctx = canvas.getContext('2d');
+
+// 3. Draw once
+AsciiProcessor.drawFrame(ctx, frameData);
+```
+
+Notes:
+- `frameData` should at minimum include `width`, `height`, `charSize`, `text` (with `\n`), and a color representation compatible with the current `.ascv` / engine format.
+- You can call `AsciiProcessor.drawFrame` repeatedly (e.g. in `requestAnimationFrame`) if you have a sequence of frames.
+
+### 2. Generate ASCII from an image or video and save it
+
+#### 2.1 Single image → ASCII + PNG or `.ascv.gz`
+
+```javascript
+import { AsciiProcessor } from './src/core/AsciiProcessor.js';
+import { VideoEncoder } from './src/core/VideoEncoder.js';
+
+const processor = new AsciiProcessor();
+const encoder = new VideoEncoder();
+
+// 1. Configure options
+processor.options.resolution = 150;
+processor.options.colorMode = 'color';
+processor.options.mode = 'grayscale';
+
+// 2. Set the source (an HTMLImageElement that has finished loading)
+processor.setSource(imageElement);
+
+// 3. Optionally set a render canvas for preview
+processor.setRenderCanvas(previewCanvas);
+
+// 4. Process once
+processor.process();
+const frameData = processor.currentFrameData;
+
+// 5a. Save as PNG using the preview canvas
+previewCanvas.toBlob((blob) => {
+  // e.g. create a download link or upload the blob
+});
+
+// 5b. Or save as .ascv.gz using VideoEncoder (single frame)
+encoder.start();
+encoder.addFrame(frameData, 0);
+const ascvBlob = await encoder.stopAndSave(); // write as .ascv.gz
+```
+
+#### 2.2 Video/GIF → `.ascv.gz` and playback
+
+High-level flow:
+
+1. Set an `HTMLVideoElement` (or a GIF-backed canvas) as the source for `AsciiProcessor`.
+2. On a timer or inside `requestAnimationFrame`, call `processor.process()` and pass `processor.currentFrameData` into `VideoEncoder.addFrame(frameData, timeMs)`.
+3. When done, call `stopAndSave()` to get an `.ascv.gz` blob.
+4. Later, load this blob with `VideoDecoder` and render each frame using `AsciiProcessor.drawFrame`.
+
+```javascript
+import { AsciiProcessor } from './src/core/AsciiProcessor.js';
+import { VideoEncoder } from './src/core/VideoEncoder.js';
+import { VideoDecoder } from './src/core/VideoDecoder.js';
+
+// Encoding
+const processor = new AsciiProcessor();
+const encoder = new VideoEncoder();
+
+processor.setSource(videoElement);
+processor.setRenderCanvas(previewCanvas);
+
+encoder.start();
+
+let startTime = performance.now();
+
+function captureFrame() {
+  const now = performance.now();
+  const t = now - startTime;
+
+  processor.process();
+  encoder.addFrame(processor.currentFrameData, t);
+
+  if (!videoElement.ended) {
+    requestAnimationFrame(captureFrame);
+  }
+}
+
+requestAnimationFrame(captureFrame);
+
+// later, after capture finishes:
+const ascvBlob = await encoder.stopAndSave(); // .ascv.gz
+
+// Decoding and playback
+const decoder = new VideoDecoder();
+await decoder.load(ascvBlob);
+
+const outputCanvas = document.getElementById('playbackCanvas');
+const outputCtx = outputCanvas.getContext('2d');
+
+decoder.play((frame) => {
+  AsciiProcessor.drawFrame(outputCtx, frame);
+}, () => {
+  console.log('Playback finished');
+});
+```
+
+This pattern lets you:
+- Use the engine as a **drop-in browser library** to show pre-generated ASCII frames.
+- Encode new ASCII content from images or videos and save it as PNG or `.ascv.gz` for later playback.

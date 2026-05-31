@@ -68,7 +68,7 @@ export class VideoEncoder {
         }
 
         this.frames.push(frameToStore);
-        this.lastFrameData = JSON.parse(JSON.stringify(frameData)); // Deep copy to keep state
+        this.lastFrameData = frameData; // No need for deep copy, frameData is a fresh object from processor
     }
 
     async stopAndSave() {

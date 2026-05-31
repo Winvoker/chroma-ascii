@@ -151,12 +151,14 @@ class ImageApp {
                 this.updateEncoderStats();
                 this.renderControls();
                 this.updateEstimation(); // Force calculation on load
+                URL.revokeObjectURL(url);
             };
             sourceImage.onerror = () => {
                 alert('Error loading image');
                 dropZone.style.display = 'flex';
                 this.hasSource = false;
                 this.renderControls();
+                URL.revokeObjectURL(url);
             };
         } else {
             alert('Please use an image file or .ascv file');
@@ -326,6 +328,13 @@ class ImageApp {
         encodeBtn.onclick = () => this.encodeImage();
         encodeBtn.disabled = !this.hasSource;
         exportSection.appendChild(encodeBtn);
+
+        const copyTextBtn = document.createElement('button');
+        copyTextBtn.textContent = '📋 Copy as Text';
+        copyTextBtn.style.marginTop = '8px';
+        copyTextBtn.onclick = () => this.copyAsText();
+        copyTextBtn.disabled = !this.hasSource;
+        exportSection.appendChild(copyTextBtn);
 
         // Estimation box is persistent in the sidebar (defined in image.html)
         // No need to recreate it here to avoid duplicate IDs.
@@ -527,6 +536,25 @@ class ImageApp {
         link.href = canvas.toDataURL('image/png');
         link.click();
         this.elements.statusBar.textContent = 'PNG downloaded!';
+    }
+
+    async copyAsText() {
+        const text = this.processor.currentFrameData?.text;
+        if (!text) return;
+
+        try {
+            await navigator.clipboard.writeText(text);
+        } catch {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.left = '-9999px';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+        }
+        this.elements.statusBar.textContent = 'ASCII text copied to clipboard!';
     }
 
     async encodeImage() {
